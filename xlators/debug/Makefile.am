@@ -1,3 +1,3 @@
-SUBDIRS = trace error-gen io-stats
+SUBDIRS = trace error-gen io-stats pedantic
 
 CLEANFILES = 

@@ -74,6 +74,8 @@ AC_CONFIG_FILES([Makefile
 		xlators/debug/error-gen/src/Makefile
 		xlators/debug/io-stats/Makefile
 		xlators/debug/io-stats/src/Makefile
+                xlators/debug/pedantic/Makefile
+                xlators/debug/pedantic/src/Makefile
 		xlators/protocol/Makefile
 		xlators/protocol/auth/Makefile
 		xlators/protocol/auth/addr/Makefile
