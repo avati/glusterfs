@@ -17,45 +17,20 @@
    <http://www.gnu.org/licenses/>.
 */
 
-#ifndef _LIBGLUSTERFSCLIENT_INTERNALS_H
-#define _LIBGLUSTERFSCLIENT_INTERNALS_H
+#ifndef _LIBGLUSTERFSCLIENT_MEM_TYPES_H
+#define _LIBGLUSTERFSCLIENT_MEM_TYPES_H
 
-#include "glusterfs.h"
-#include "xlator.h"
+#include "mem-types.h"
 
-#include "libglusterfsclient-mem-types.h"
+#define GF_MEM_TYPE_START (gf_common_mt_end + 1)
 
-#ifdef __cplusplus
-extern "C" {
-#if 0
-}
-#endif
-#endif
+enum glfs_mem_types_ {
+        glfs_mt_session_t = GF_MEM_TYPE_START,
+        glfs_mt_fd_t,
+        glfs_mt_char,
+        glfs_mt_call_pool_t,
+        glfs_mt_xlator_t,
+        glfs_mt_end
 
-
-struct glfs_session {
-        glusterfs_ctx_t      *ctx;
-        pthread_t             pollthread;
 };
-
-
-struct glfs_fd {
-        struct glfs_session  *session;
-        fd_t                 *fd;
-};
-
-
-struct glfs_params {
-        char                      *path;
-        mode_t                     mode;
-        int                        flags;
-}
-
-
-int glfs_session_set_master (struct glfs_session *session);
-
-#ifdef __cplusplus
-}
-#endif
-
 #endif

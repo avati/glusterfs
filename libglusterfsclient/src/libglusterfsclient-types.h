@@ -17,13 +17,9 @@
    <http://www.gnu.org/licenses/>.
 */
 
-#ifndef _LIBGLUSTERFSCLIENT_INTERNALS_H
-#define _LIBGLUSTERFSCLIENT_INTERNALS_H
+#ifndef _LIBGLUSTERFSCLIENT_TYPES_H
+#define _LIBGLUSTERFSCLIENT_TYPES_H
 
-#include "glusterfs.h"
-#include "xlator.h"
-
-#include "libglusterfsclient-mem-types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,26 +29,12 @@ extern "C" {
 #endif
 
 
-struct glfs_session {
-        glusterfs_ctx_t      *ctx;
-        pthread_t             pollthread;
-};
+/* Handle for a glusterfs volume */
+struct glfs_session;
 
+/* A descriptor for an open file or directory */
+struct glfs_fd;
 
-struct glfs_fd {
-        struct glfs_session  *session;
-        fd_t                 *fd;
-};
-
-
-struct glfs_params {
-        char                      *path;
-        mode_t                     mode;
-        int                        flags;
-}
-
-
-int glfs_session_set_master (struct glfs_session *session);
 
 #ifdef __cplusplus
 }

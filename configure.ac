@@ -23,6 +23,8 @@ AM_CONFIG_HEADER([config.h])
 AC_CONFIG_FILES([Makefile
 		libglusterfs/Makefile
 		libglusterfs/src/Makefile
+                libglusterfsclient/Makefile
+                libglusterfsclient/src/Makefile
 		glusterfsd/Makefile
 		glusterfsd/src/Makefile
                 rpc/Makefile
