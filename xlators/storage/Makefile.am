@@ -1,3 +1,3 @@
-SUBDIRS = posix
+SUBDIRS = file-snapshot posix
 
 CLEANFILES = 

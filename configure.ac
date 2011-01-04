@@ -126,6 +126,8 @@ AC_CONFIG_FILES([Makefile
                 xlators/mgmt/Makefile
                 xlators/mgmt/glusterd/Makefile
                 xlators/mgmt/glusterd/src/Makefile
+                xlators/storage/file-snapshot/Makefile
+                xlators/storage/file-snapshot/src/Makefile
 		glusterfs.spec])
 
 AC_CANONICAL_HOST

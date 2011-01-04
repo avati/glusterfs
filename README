@@ -1,1 +1,60 @@
+
+
+How to achieve each of the below feature: (here, '@@@' is the delimiter string through which snapshot command is understood by posix layer)
+
+
+* Taking Snapshot:
+
+# ln filename filename@@@snap-name
+for success: ret = -1; errno = EBUSY;
+
+* Clone:
+  ->  Clone of a file (file which already has snapshots)
+
+# ln filename another-filename
+for success: ret = -1; errno = EBUSY;
+
+  ->  Clone of a snapshot
+
+# ln filename@@@snap-name another-filename
+for success: ret = -1; errno = EBUSY;
+
+
+* Restore: This can be achieved by two or three steps as per the need.
+  -> step 1: rename the file to temp.file
+
+# mv filename temp.filename
+
+  -> step 2: clone the snapshot from which we want to restore to actual filename
+
+# ln temp.filename@@@snap-name filename
+for success: ret = -1; errno = EBUSY;
+
+  -> step 3: (optional) delete the temp.file
+
+ # rm temp.filename
+
+
+
+* Delete the snapshot: (not complete as per specification, but for user, its complete).
+
+# rm filename@@@snap-name
+
+
+* List snapshots
+
+# ls -l filename@@@list
+
+
+* Access (or read() ) particular snapshot
+
+# cat filename@@@snap-name
+
+
+
+* Rename a snapshot
+
+# mv filename@@@snap-name1 filename@@@snap-name2
+
+
 For more info visit http://www.gluster.org
