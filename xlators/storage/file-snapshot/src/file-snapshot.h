@@ -92,7 +92,7 @@ struct posix_fd {
 
         int32_t          snapshot;  /* whether snapshot ? yes/no */
         int32_t          fd_count;  /* length of the fd array in case of snapshot */
-        struct snap_fds  snap_fd[GF_MAX_SNAPSHOT_LINKS];
+        struct snap_fds  snap_fd[GF_MAX_SNAPSHOT_LINKS]; /* XXX - FIXME: make runtime allocation instead of hard limit */
 
         int              list_snapshots; /* in read, do 'readdir', and send entries */
 };
