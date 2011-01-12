@@ -173,9 +173,11 @@ gf_sync_and_free_pfd (xlator_t *this, struct posix_fd *pfd)
         for (i = 1; i < pfd->fd_count; i++) {
                 close (pfd->snap_fd[i].fd);
                 GF_FREE (pfd->snap_fd[i].snap_idx);
+                pfd->snap_fd[i].snap_idx = NULL;
         }
-        GF_FREE (pfd->snap_fd[0].snap_idx);
         close (pfd->snap_fd[0].idx_fd);
+        GF_FREE (pfd->snap_fd[0].snap_idx);
+        pfd->snap_fd[0].snap_idx = NULL;
 
         pfd->snap_fd[0].idx_len = 0;
 
@@ -240,7 +242,8 @@ gf_create_fresh_snapshot (xlator_t *this, loc_t *loc, const char *path,
         if (!loc || !loc->inode || !path)
                 goto out;
 
-        gf_log (this->name, GF_LOG_ERROR, "%s %s", path, snap_name);
+        gf_log (this->name, GF_LOG_INFO, "path: (%s) snapshot: (%s)",
+                path, snap_name);
 
         /* NOTICE: inode wide lock */
         LOCK (&loc->inode->lock);
@@ -481,6 +484,9 @@ gf_create_another_snapshot (xlator_t *this, loc_t *loc, const char *path,
         if (!loc || !loc->inode || !path)
                 goto out;
 
+        gf_log (this->name, GF_LOG_INFO, "path: (%s) snapshot: (%s)",
+                path, snap_name);
+
         /* NOTICE: inode wide lock */
         LOCK (&loc->inode->lock);
 
@@ -653,8 +659,10 @@ out:
         UNLOCK (&loc->inode->lock);
         if (ret) {
                 /* Revert back to normal file */
-                gf_log (this->name, GF_LOG_DEBUG, "something failed");
+                gf_log (this->name, GF_LOG_ERROR, "something failed");
         }
+        if (!ret)
+                gf_log (this->name, GF_LOG_INFO, "snapshot successful");
 
         return ret;
 }
@@ -718,6 +726,7 @@ gf_snap_read_index_file (const char *index_path, int32_t open_flag,
         if (calloc_len == 0) {
                 ret = 0;
                 snap->idx_len = 0;
+                snap->snap_idx = NULL;
                 goto out;
         }
 
@@ -1858,7 +1867,8 @@ __gf_snap_delete_snapshot (xlator_t *this, const char *path,
         gf_sync_snap_info_file (&child_snap);
         GF_FREE (child_snap.snap_idx);
         GF_FREE (current_snap.snap_idx);
-
+        child_snap.snap_idx = NULL;
+        current_snap.snap_idx = NULL;
         close (snap_data_fd);
         close (child_data_fd);
         close (child_snap.idx_fd);
