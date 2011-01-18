@@ -1217,11 +1217,12 @@ default_notify (xlator_t *this, int32_t event, void *data, ...)
                 }
         }
         break;
+        case GF_EVENT_CHILD_DOWN:
         case GF_EVENT_CHILD_CONNECTING:
         case GF_EVENT_CHILD_UP:
         {
                 xlator_list_t *parent = this->parents;
-                /* Handle the case of CHILD_UP specially, send it to fuse */
+                /* Handle case of CHILD_* event specially, send it to fuse */
                 if (!parent && this->ctx && this->ctx->master)
                         xlator_notify (this->ctx->master, event, this->graph, NULL);
 
@@ -1233,7 +1234,6 @@ default_notify (xlator_t *this, int32_t event, void *data, ...)
                 }
         }
         break;
-        case GF_EVENT_CHILD_DOWN:
         default:
         {
                 xlator_list_t *parent = this->parents;
