@@ -98,16 +98,16 @@ extern char *gf_mgmt_list[GF_MGMT_MAXVALUE];
 				"invalid argument: " #arg);		\
 			goto label;					\
 		}							\
-	} while (0); 
+	} while (0);
 
 #define GF_VALIDATE_OR_GOTO(name,arg,label)   do {		\
 		if (!arg) {					\
-			errno = EINVAL;   			\
+			errno = EINVAL;			\
 			gf_log (name, GF_LOG_ERROR,		\
 				"invalid argument: " #arg);	\
 			goto label;				\
 		}						\
-	} while (0); 
+	} while (0);
 
 #define GF_VALIDATE_OR_GOTO_WITH_ERROR(name, arg, label, errno, error) do { \
                 if (!arg) {                                                 \
@@ -348,4 +348,3 @@ char valid_internet_address (char *address);
 char *uuid_utoa (uuid_t uuid);
 char *uuid_utoa_r (uuid_t uuid, char *dst);
 #endif /* _COMMON_UTILS_H */
-
