@@ -1,16 +1,18 @@
 import re
 import os
 import sys
+import stat
 import time
 import errno
 import struct
 import select
+import socket
 import logging
 import tempfile
 import threading
 from ctypes import *
 from ctypes.util import find_library
-from errno import EEXIST, ENOENT, ENODATA, ENOTDIR
+from errno import EEXIST, ENOENT, ENODATA, ENOTDIR, ELOOP
 
 from gconf import gconf
 import repce
@@ -107,7 +109,7 @@ class Server(object):
                 entries = os.listdir(path)
             except OSError:
                 ex = sys.exc_info()[1]
-                if ex.errno in (ENOTDIR, ENOENT):
+                if ex.errno in (ENOTDIR, ENOENT, ELOOP):
                     try:
                         os.unlink(path)
                         return
@@ -120,7 +122,22 @@ class Server(object):
         for e in entries:
             cls.purge(os.path.join(path, e))
         if me_also:
-            os.rmdir(path)
+            try:
+                os.rmdir(path)
+            except OSError:
+                ex = sys.exc_info()[1]
+                if ex.errno == ENOTDIR:
+                    try:
+                        os.unlink(path)
+                        return
+                    except OSError:
+                        ex = sys.exc_info()[1]
+                        if ex.errno != ENOENT:
+                            raise
+                elif ex.errno == ENOENT:
+                    logging.debug ("Trying to delete a file which is not present")
+                else:
+                    raise
 
     @classmethod
     def _create(cls, path, ctor):
@@ -154,7 +171,24 @@ class Server(object):
 
     @classmethod
     def set_xtime(cls, path, uuid, mark):
-        Xattr.lsetxattr(path, '.'.join([cls.GX_NSPACE, uuid, 'xtime']), struct.pack('!II', *mark))
+	try:
+	    Xattr.lsetxattr(path, '.'.join([cls.GX_NSPACE, uuid, 'xtime']), struct.pack('!II', *mark))
+	except OSError:
+	    ex = sys.exc_info()[1]
+	    if ex.errno == ENOENT:
+		logging.error ("File for which the setxattr to be done is not present")
+
+    @staticmethod
+    def setattr(path, adct):
+        own = adct.get('own')
+        if own:
+            os.lchown(path, *own)
+        mode = adct.get('mode')
+        if mode:
+            os.chmod(path, stat.S_IMODE(mode))
+        times = adct.get('times')
+        if times:
+            os.utime(path, times)
 
     @staticmethod
     def pid():
@@ -165,6 +199,10 @@ class Server(object):
     def ping(cls):
         cls.lastping += 1
         return cls.lastping
+
+    @staticmethod
+    def version():
+        return 1.0
 
 
 class SlaveLocal(object):
@@ -208,6 +246,15 @@ class SlaveRemote(object):
 
     def start_fd_client(self, i, o, **opts):
         self.server = RepceClient(i, o)
+        rv = self.server.__version__()
+        exrv = {'proto': repce.repce_version, 'object': Server.version()}
+        da0 = (rv, exrv)
+        da1 = ({}, {})
+        for i in range(2):
+            for k, v in da0[i].iteritems():
+                da1[i][k] = int(v)
+        if da1[0] != da1[1]:
+            raise RuntimeError("RePCe major version mismatch: local %s, remote %s" % (exrv, rv))
         if gconf.timeout and int(gconf.timeout) > 0:
             def pinger():
                 while True:
@@ -237,9 +284,19 @@ class AbstractUrl(object):
     def scheme(self):
         return type(self).__name__.lower()
 
+    def canonical_path(self):
+        return self.path
+
+    def get_url(self, canonical=False):
+        if canonical:
+            pa = self.canonical_path()
+        else:
+            pa = self.path
+        return "://".join((self.scheme(), pa))
+
     @property
     def url(self):
-        return "://".join((self.scheme(), self.path))
+        return self.get_url()
 
 
   ### Concrete resource classes ###
@@ -282,6 +339,9 @@ class GLUSTER(AbstractUrl, SlaveLocal, SlaveRemote):
     def __init__(self, path):
         self.host, self.volume = sup(self, path, '^(%s):(.+)' % HostRX.pattern)
 
+    def canonical_path(self):
+        return ':'.join([socket.gethostbyname(self.host), self.volume])
+
     def can_connect_to(self, remote):
         return True
 
@@ -303,7 +363,7 @@ class GLUSTER(AbstractUrl, SlaveLocal, SlaveRemote):
             try:
                 os.rmdir(d)
             except:
-                logging.warn('stale mount left behind on ' + d)
+                logging.warn('stale mount possibly left behind on ' + d)
         logging.debug('auxiliary glusterfs mount prepared')
 
     def connect_remote(self, *a, **kw):
@@ -327,11 +387,20 @@ class SSH(AbstractUrl, SlaveRemote):
                                           '^((?:%s@)?%s):(.+)' % tuple([ r.pattern for r in (UserRX, HostRX) ]))
         self.inner_rsc = parse_url(inner_url)
 
+    def canonical_path(self):
+        m = re.match('([^@]+)@(.+)', self.remote_addr)
+        if m:
+            u, h = m.groups()
+        else:
+            u, h = os.getlogin(), self.remote_addr
+        remote_addr = '@'.join([u, socket.gethostbyname(h)])
+        return ':'.join([remote_addr, self.inner_rsc.get_url(canonical=True)])
+
     def can_connect_to(self, remote):
         return False
 
     def start_fd_client(self, *a, **opts):
-        if opts['deferred']:
+        if opts.get('deferred'):
             return a
         sup(self, *a)
         ityp = type(self.inner_rsc)
@@ -350,7 +419,7 @@ class SSH(AbstractUrl, SlaveRemote):
         deferred = go_daemon == 'postconn'
         ret = sup(self, gconf.ssh_command.split() + gconf.ssh_ctl_args + [self.remote_addr], slave=self.inner_rsc.url, deferred=deferred)
         if deferred:
-            # send a ping to peer so that we can wait for
+            # send a message to peer so that we can wait for
             # the answer from which we know connection is
             # established and we can proceed with daemonization
             # (doing that too early robs the ssh passwd prompt...)
