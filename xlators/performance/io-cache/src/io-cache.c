@@ -44,11 +44,17 @@ ioc_get_priority (ioc_table_t *table, const char *path);
 inline uint32_t
 ioc_hashfn (void *data, int len)
 {
-        off_t offset;
+        off_t    offset = 0;
+        uint32_t hash   = 0;
+
+        GF_VALIDATE_OR_GOTO ("io-cache", data, out);
 
         offset = *(off_t *) data;
 
-        return (offset >> ioc_log2_page_size);
+        hash = (offset >> ioc_log2_page_size);
+
+out:
+        return hash;
 }
 
 
@@ -57,11 +63,14 @@ ioc_inode_reupdate (ioc_inode_t *ioc_inode)
 {
         ioc_table_t *table = NULL;
 
+        GF_VALIDATE_OR_GOTO ("io-cache", ioc_inode, out);
+
         table = ioc_inode->table;
 
         list_add_tail (&ioc_inode->inode_lru,
                        &table->inode_lru[ioc_inode->weight]);
 
+out:
         return ioc_inode;
 }
 
@@ -72,6 +81,8 @@ ioc_get_inode (dict_t *dict, char *name)
         ioc_inode_t *ioc_inode      = NULL;
         data_t      *ioc_inode_data = NULL;
         ioc_table_t *table          = NULL;
+
+        GF_VALIDATE_OR_GOTO ("io-cache", dict, out);
 
         ioc_inode_data = dict_get (dict, name);
         if (ioc_inode_data) {
@@ -87,6 +98,7 @@ ioc_get_inode (dict_t *dict, char *name)
                 ioc_table_unlock (table);
         }
 
+out:
         return ioc_inode;
 }
 
@@ -94,9 +106,13 @@ ioc_get_inode (dict_t *dict, char *name)
 int32_t
 ioc_inode_need_revalidate (ioc_inode_t *ioc_inode)
 {
-        int8_t          need_revalidate = 0;
+        int8_t          need_revalidate = -1;
         struct timeval  tv              = {0,};
         ioc_table_t    *table           = NULL;
+
+        GF_VALIDATE_OR_GOTO ("io-cache", ioc_inode, out);
+
+        need_revalidate = 0;
 
         table = ioc_inode->table;
 
@@ -106,6 +122,7 @@ ioc_inode_need_revalidate (ioc_inode_t *ioc_inode)
                 need_revalidate = 1;
         }
 
+out:
         return need_revalidate;
 }
 
@@ -141,6 +158,8 @@ ioc_inode_flush (ioc_inode_t *ioc_inode)
 {
         int64_t destroy_size = 0;
 
+        GF_VALIDATE_OR_GOTO ("io-cache", ioc_inode, out);
+
         ioc_inode_lock (ioc_inode);
         {
                 destroy_size = __ioc_inode_flush (ioc_inode);
@@ -155,6 +174,7 @@ ioc_inode_flush (ioc_inode_t *ioc_inode)
                 ioc_table_unlock (ioc_inode->table);
         }
 
+out:
         return;
 }
 
@@ -164,6 +184,7 @@ ioc_setattr_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
                  int32_t op_ret, int32_t op_errno,
                  struct iatt *preop, struct iatt *postop)
 {
+        GF_ASSERT (frame);
         STACK_UNWIND_STRICT (setattr, frame, op_ret, op_errno, preop, postop);
         return 0;
 }
@@ -174,6 +195,10 @@ ioc_setattr (call_frame_t *frame, xlator_t *this, loc_t *loc,
              struct iatt *stbuf, int32_t valid)
 {
         uint64_t ioc_inode = 0;
+        int32_t  op_errno  = EINVAL;
+
+        GF_ASSERT (frame);
+        GF_VALIDATE_OR_GOTO (frame->this->name, this, unwind);
 
         inode_ctx_get (loc->inode, this, &ioc_inode);
 
@@ -186,7 +211,12 @@ ioc_setattr (call_frame_t *frame, xlator_t *this, loc_t *loc,
                     FIRST_CHILD (this)->fops->setattr, loc, stbuf, valid);
 
         return 0;
+
+unwind:
+        STACK_UNWIND_STRICT (setattr, frame, -1, op_errno, NULL, NULL);
+        return 0;
 }
+
 
 int32_t
 ioc_lookup_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
@@ -201,6 +231,8 @@ ioc_lookup_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
         const char   *path              = NULL;
         ioc_local_t  *local             = NULL;
 
+        GF_ASSERT (frame);
+
         if (op_ret != 0) {
                 goto out;
         }
@@ -209,12 +241,16 @@ ioc_lookup_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
         if (local == NULL) {
                 op_ret = -1;
                 op_errno = EINVAL;
+                gf_log (frame->this->name, GF_LOG_WARNING, "local is NULL");
                 goto out;
         }
 
         if (!this || !this->private) {
                 op_ret = -1;
                 op_errno = EINVAL;
+                gf_log (frame->this->name, GF_LOG_WARNING,
+                        (this == NULL) ? "xlator object this is NULL"
+                        : "io-cache inode table is NULL");
                 goto out;
         }
 
@@ -230,8 +266,7 @@ ioc_lookup_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
                 if (!ioc_inode) {
                         weight = ioc_get_priority (table, path);
 
-                        ioc_inode = ioc_inode_update (table, inode,
-                                                      weight);
+                        ioc_inode = ioc_inode_update (table, inode, weight);
 
                         __inode_ctx_put (inode, this,
                                          (uint64_t)(long)ioc_inode);
@@ -250,9 +285,7 @@ ioc_lookup_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
         }
         ioc_inode_unlock (ioc_inode);
 
-        cache_still_valid = ioc_cache_still_valid (ioc_inode,
-                                                   stbuf);
-
+        cache_still_valid = ioc_cache_still_valid (ioc_inode, stbuf);
         if (!cache_still_valid) {
                 ioc_inode_flush (ioc_inode);
         }
@@ -281,19 +314,20 @@ ioc_lookup (call_frame_t *frame, xlator_t *this, loc_t *loc,
             dict_t *xattr_req)
 {
         ioc_local_t *local    = NULL;
-        int32_t      op_errno = -1, ret = -1;
+        int32_t      op_errno = EINVAL, ret = -1;
+
+        GF_ASSERT (frame);
+        GF_VALIDATE_OR_GOTO (frame->this->name, this, unwind);
 
         local = GF_CALLOC (1, sizeof (*local), gf_ioc_mt_ioc_local_t);
         if (local == NULL) {
                 op_errno = ENOMEM;
-                gf_log (this->name, GF_LOG_ERROR, "out of memory");
                 goto unwind;
         }
 
         ret = loc_copy (&local->file_loc, loc);
         if (ret != 0) {
                 op_errno = ENOMEM;
-                gf_log (this->name, GF_LOG_ERROR, "out of memory");
                 goto unwind;
         }
 
@@ -311,6 +345,7 @@ unwind:
         return 0;
 }
 
+
 /*
  * ioc_forget -
  *
@@ -324,11 +359,15 @@ ioc_forget (xlator_t *this, inode_t *inode)
 {
         uint64_t ioc_inode = 0;
 
+        GF_VALIDATE_OR_GOTO ("io-cache", this, out);
+        GF_VALIDATE_OR_GOTO (this->name, inode, out);
+
         inode_ctx_get (inode, this, &ioc_inode);
 
         if (ioc_inode)
                 ioc_inode_destroy ((ioc_inode_t *)(long)ioc_inode);
 
+out:
         return 0;
 }
 
@@ -353,13 +392,19 @@ ioc_cache_validate_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
         size_t       destroy_size = 0;
         struct iatt *local_stbuf  = NULL;
 
+        GF_ASSERT (frame);
+
         local = frame->local;
+        GF_VALIDATE_OR_GOTO (frame->this->name, local, out);
+
         ioc_inode = local->inode;
+        GF_VALIDATE_OR_GOTO (frame->this->name, ioc_inode, out);
+
         local_stbuf = stbuf;
 
         if ((op_ret == -1) ||
             ((op_ret >= 0) && !ioc_cache_still_valid(ioc_inode, stbuf))) {
-                gf_log (ioc_inode->table->xl->name, GF_LOG_DEBUG,
+                gf_log (ioc_inode->table->xl->name, GF_LOG_WARNING,
                         "cache for inode(%p) is invalid. flushing all pages",
                         ioc_inode);
                 /* NOTE: only pages with no waiting frames are flushed by
@@ -405,6 +450,7 @@ ioc_cache_validate_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
          */
         fd_unref (local->fd);
 
+out:
         STACK_DESTROY (frame->root);
 
         return 0;
@@ -416,7 +462,10 @@ ioc_wait_on_inode (ioc_inode_t *ioc_inode, ioc_page_t *page)
 {
         ioc_waitq_t *waiter     = NULL, *trav = NULL;
         uint32_t     page_found = 0;
-        int32_t      ret        = 0;
+        int32_t      ret        = -EINVAL;
+
+        GF_VALIDATE_OR_GOTO ("io-cache", ioc_inode, out);
+        GF_VALIDATE_OR_GOTO ("io-cache", page, out);
 
         trav = ioc_inode->waitq;
 
@@ -432,8 +481,6 @@ ioc_wait_on_inode (ioc_inode_t *ioc_inode, ioc_page_t *page)
                 waiter = GF_CALLOC (1, sizeof (ioc_waitq_t),
                                     gf_ioc_mt_ioc_waitq_t);
                 if (waiter == NULL) {
-                        gf_log (ioc_inode->table->xl->name, GF_LOG_ERROR,
-                                "out of memory");
                         ret = -ENOMEM;
                         goto out;
                 }
@@ -443,9 +490,11 @@ ioc_wait_on_inode (ioc_inode_t *ioc_inode, ioc_page_t *page)
                 ioc_inode->waitq = waiter;
         }
 
+        ret = 0;
 out:
         return ret;
 }
+
 
 /*
  * ioc_cache_validate -
@@ -462,28 +511,48 @@ ioc_cache_validate (call_frame_t *frame, ioc_inode_t *ioc_inode, fd_t *fd,
         call_frame_t *validate_frame = NULL;
         ioc_local_t  *validate_local = NULL;
         ioc_local_t  *local          = NULL;
-        int32_t       ret            = 0;
+        int32_t       ret            = -1;
+
+        if (frame == NULL) {
+                gf_log ("io-cache", GF_LOG_WARNING, "frame is NULL");
+                local->op_ret = -1;
+                local->op_errno = EINVAL;
+                goto out;
+        }
 
         local = frame->local;
+        GF_VALIDATE_OR_GOTO_WITH_ERROR (frame->this->name, local, out, ret, -1);
+
+        if (fd == NULL) {
+                gf_log (frame->this->name, GF_LOG_WARNING, "fd is NULL");
+                local->op_ret = -1;
+                local->op_errno = EINVAL;
+                goto out;
+        }
+
+        if (ioc_inode == NULL) {
+                gf_log (frame->this->name, GF_LOG_WARNING,
+                        "no ioc_inode found for fd (%p) opened on "
+                        "inode (ino:%"PRId64" gfid:%s)", fd, fd->inode->ino,
+                        fd->inode->gfid);
+                local->op_ret = -1;
+                local->op_errno = EINVAL;
+                goto out;
+        }
+
         validate_local = GF_CALLOC (1, sizeof (ioc_local_t),
                                     gf_ioc_mt_ioc_local_t);
         if (validate_local == NULL) {
-                ret = -1;
                 local->op_ret = -1;
                 local->op_errno = ENOMEM;
-                gf_log (ioc_inode->table->xl->name, GF_LOG_ERROR,
-                        "out of memory");
                 goto out;
         }
 
         validate_frame = copy_frame (frame);
         if (validate_frame == NULL) {
-                ret = -1;
                 local->op_ret = -1;
                 local->op_errno = ENOMEM;
                 GF_FREE (validate_local);
-                gf_log (ioc_inode->table->xl->name, GF_LOG_ERROR,
-                        "out of memory");
                 goto out;
         }
 
@@ -495,6 +564,7 @@ ioc_cache_validate (call_frame_t *frame, ioc_inode_t *ioc_inode, fd_t *fd,
                     FIRST_CHILD (frame->this),
                     FIRST_CHILD (frame->this)->fops->fstat, fd);
 
+        ret = 0;
 out:
         return ret;
 }
@@ -503,10 +573,14 @@ out:
 inline uint32_t
 is_match (const char *path, const char *pattern)
 {
-        int32_t ret = 0;
+        int32_t ret = -1;
+
+        GF_VALIDATE_OR_GOTO ("io-cache", path, out);
+        GF_VALIDATE_OR_GOTO ("io-cache", pattern, out);
 
         ret = fnmatch (pattern, path, FNM_NOESCAPE);
 
+out:
         return (ret == 0);
 }
 
@@ -517,6 +591,9 @@ ioc_get_priority (ioc_table_t *table, const char *path)
         uint32_t             priority = 0;
         struct ioc_priority *curr     = NULL;
 
+        GF_VALIDATE_OR_GOTO ("io-cache", table, out);
+        GF_VALIDATE_OR_GOTO ("io-cache", path, out);
+
         if (list_empty(&table->priority_list)) {
                 priority = 1;
         } else {
@@ -526,6 +603,7 @@ ioc_get_priority (ioc_table_t *table, const char *path)
                 }
         }
 
+out:
         return priority;
 }
 
@@ -550,10 +628,22 @@ ioc_open_cbk (call_frame_t *frame, void *cookie, xlator_t *this, int32_t op_ret,
         ioc_inode_t *ioc_inode     = NULL;
         uint32_t     weight        = 0xffffffff;
 
-        local = frame->local;
+        GF_ASSERT (frame);
+
         if (!this || !this->private) {
                 op_ret = -1;
                 op_errno = EINVAL;
+                gf_log (frame->this->name, GF_LOG_WARNING,
+                        (this == NULL) ? "xlator object this is NULL"
+                        : "io-cache inode table is NULL");
+                goto out;
+        }
+
+        local = frame->local;
+        if (local == NULL) {
+                op_ret = -1;
+                op_errno = EINVAL;
+                gf_log (frame->this->name, GF_LOG_WARNING, "local is NULL");
                 goto out;
         }
 
@@ -603,8 +693,10 @@ ioc_open_cbk (call_frame_t *frame, void *cookie, xlator_t *this, int32_t op_ret,
         }
 
 out:
-        GF_FREE (local);
-        frame->local = NULL;
+        if (local != NULL) {
+                GF_FREE (local);
+                frame->local = NULL;
+        }
 
         STACK_UNWIND_STRICT (open, frame, op_ret, op_errno, fd);
 
@@ -635,22 +727,52 @@ ioc_create_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
         ioc_inode_t *ioc_inode = NULL;
         uint32_t     weight    = 0xffffffff;
         const char  *path      = NULL;
+        int32_t      ret       = -1;
 
-        local = frame->local;
+        GF_ASSERT (frame);
+
         if (!this || !this->private) {
                 op_ret = -1;
                 op_errno = EINVAL;
+                gf_log (frame->this->name, GF_LOG_WARNING,
+                        (this == NULL) ? "xlator object (this) is NULL"
+                        : "io-cache inode table is NULL");
+                goto out;
+        }
+
+        local = frame->local;
+        if (local == NULL) {
+                op_ret = -1;
+                op_errno = EINVAL;
+                gf_log (frame->this->name, GF_LOG_WARNING,
+                        "local is NULL");
                 goto out;
         }
 
         table = this->private;
         path = local->file_loc.path;
+        if (path == NULL) {
+                op_ret = -1;
+                op_errno = EINVAL;
+                gf_log (frame->this->name, GF_LOG_WARNING,
+                        "path cannot be found");
+                goto out;
+        }
 
         if (op_ret != -1) {
                 /* assign weight */
                 weight = ioc_get_priority (table, path);
 
                 ioc_inode = ioc_inode_update (table, inode, weight);
+                if (ioc_inode == NULL) {
+                        gf_log (this->name, GF_LOG_WARNING,
+                                "cannot allocate memory for storing io cache"
+                                " context in inode(ino:%"PRId64" gfid:%s)",
+                                fd->inode->ino, fd->inode->gfid);
+                        op_ret = -1;
+                        op_errno = ENOMEM;
+                        goto out;
+                }
 
                 ioc_inode_lock (ioc_inode);
                 {
@@ -662,13 +784,33 @@ ioc_create_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
                             || ((table->max_file_size >= 0)
                                 && (table->max_file_size
                                     < ioc_inode->ia_size))) {
-                                fd_ctx_set (fd, this, 1);
+                                ret = fd_ctx_set (fd, this, 1);
+                                if (ret < 0) {
+                                        gf_log (this->name, GF_LOG_WARNING,
+                                                "cannot disable caching for fd "
+                                                "(%p) opened on inode "
+                                                "(ino:%"PRId64" gfid:%s)", fd,
+                                                fd->inode->ino,
+                                                fd->inode->gfid);
+                                        op_ret = -1;
+                                        op_errno = EINVAL;
+                                        goto out;
+                                }
                         }
                 }
                 ioc_inode_unlock (ioc_inode);
 
-                inode_ctx_put (fd->inode, this,
-                               (uint64_t)(long)ioc_inode);
+                ret = inode_ctx_put (fd->inode, this,
+                                     (uint64_t)(long)ioc_inode);
+                if (ret < 0) {
+                        gf_log (this->name, GF_LOG_WARNING,
+                                "cannot store io-cache context information in "
+                                "inode (ino:%"PRId64" gfid:%s)", fd->inode->ino,
+                                uuid_utoa (fd->inode->gfid));
+                        op_ret = -1;
+                        op_errno = EINVAL;
+                        goto out;
+                }
 
                 /* If O_DIRECT open, we disable caching on it */
                 if (local->flags & O_DIRECT){
@@ -676,14 +818,34 @@ ioc_create_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
                          * O_DIRECT is only for one fd, not the inode
                          * as a whole
                          */
-                        fd_ctx_set (fd, this, 1);
+                        ret = fd_ctx_set (fd, this, 1);
+                        if (ret < 0) {
+                                gf_log (this->name, GF_LOG_WARNING,
+                                        "cannot disable caching for fd (%p) "
+                                        "opened on inode (ino:%"PRId64" gfid:%s)",
+                                        fd, fd->inode->ino,
+                                        uuid_utoa (fd->inode->gfid));
+                                op_ret = -1;
+                                op_errno = EINVAL;
+                        }
+
                 }
 
                 /* weight = 0, we disable caching on it */
                 if (weight == 0) {
                         /* we allow a pattern-matched cache disable this way
                          */
-                        fd_ctx_set (fd, this, 1);
+                        ret = fd_ctx_set (fd, this, 1);
+                        if (ret < 0) {
+                                gf_log (this->name, GF_LOG_WARNING,
+                                        "cannot disable caching for fd (%p) "
+                                        "opened on inode (ino:%"PRId64" gfid:%s)",
+                                        fd, fd->inode->ino,
+                                        uuid_utoa (fd->inode->gfid));
+                                op_ret = -1;
+                                op_errno = EINVAL;
+                                goto out;
+                        }
                 }
         }
 
@@ -709,22 +871,50 @@ ioc_mknod_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
         ioc_inode_t *ioc_inode = NULL;
         uint32_t     weight    = 0xffffffff;
         const char  *path      = NULL;
+        int32_t      ret       = -1;
 
-        local = frame->local;
         if (!this || !this->private) {
                 op_ret = -1;
                 op_errno = EINVAL;
+                gf_log (frame->this->name, GF_LOG_WARNING,
+                        (this == NULL) ? "xlator object (this) is NULL"
+                        : "io-cache inode table is NULL");
+                goto out;
+        }
+
+        local = frame->local;
+        if (local == NULL) {
+                op_ret = -1;
+                op_errno = EINVAL;
+                gf_log (frame->this->name, GF_LOG_WARNING,
+                        "local is NULL");
                 goto out;
         }
 
         table = this->private;
         path = local->file_loc.path;
+        if (path == NULL) {
+                op_ret = -1;
+                op_errno = EINVAL;
+                gf_log (frame->this->name, GF_LOG_WARNING,
+                        "path cannot be found");
+                goto out;
+        }
 
         if (op_ret != -1) {
                 /* assign weight */
                 weight = ioc_get_priority (table, path);
 
                 ioc_inode = ioc_inode_update (table, inode, weight);
+                if (ioc_inode == NULL) {
+                        gf_log (this->name, GF_LOG_WARNING,
+                                "cannot allocate memory for storing io cache"
+                                " context in inode(ino:%"PRId64" gfid:%s)",
+                                inode->ino, inode->gfid);
+                        op_ret = -1;
+                        op_errno = ENOMEM;
+                        goto out;
+                }
 
                 ioc_inode_lock (ioc_inode);
                 {
@@ -734,15 +924,26 @@ ioc_mknod_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
                 }
                 ioc_inode_unlock (ioc_inode);
 
-                inode_ctx_put (inode, this,
-                               (uint64_t)(long)ioc_inode);
+                ret = inode_ctx_put (inode, this,
+                                     (uint64_t)(long)ioc_inode);
+                if (ret < 0) {
+                        gf_log (this->name, GF_LOG_WARNING,
+                                "cannot store io-cache context information in "
+                                "inode (ino:%"PRId64" gfid:%s)", inode->ino,
+                                uuid_utoa (inode->gfid));
+                        op_ret = -1;
+                        op_errno = EINVAL;
+                        goto out;
+                }
         }
 
 out:
         frame->local = NULL;
 
-        loc_wipe (&local->file_loc);
-        GF_FREE (local);
+        if (local != NULL) {
+                loc_wipe (&local->file_loc);
+                GF_FREE (local);
+        }
 
         STACK_UNWIND_STRICT (mknod, frame, op_ret, op_errno, inode, buf,
                              preparent, postparent);
@@ -755,19 +956,20 @@ ioc_mknod (call_frame_t *frame, xlator_t *this, loc_t *loc, mode_t mode,
            dev_t rdev, dict_t *params)
 {
         ioc_local_t *local    = NULL;
-        int32_t      op_errno = -1, ret = -1;
+        int32_t      op_errno = EINVAL, ret = -1;
+
+        GF_ASSERT (frame);
+        GF_VALIDATE_OR_GOTO (frame->this->name, this, unwind);
 
         local = GF_CALLOC (1, sizeof (*local), gf_ioc_mt_ioc_local_t);
         if (local == NULL) {
                 op_errno = ENOMEM;
-                gf_log (this->name, GF_LOG_ERROR, "out of memory");
                 goto unwind;
         }
 
         ret = loc_copy (&local->file_loc, loc);
         if (ret != 0) {
                 op_errno = ENOMEM;
-                gf_log (this->name, GF_LOG_ERROR, "out of memory");
                 goto unwind;
         }
 
@@ -803,14 +1005,16 @@ int32_t
 ioc_open (call_frame_t *frame, xlator_t *this, loc_t *loc, int32_t flags,
           fd_t *fd, int32_t wbflags)
 {
+        ioc_local_t *local    = NULL;
+        int32_t      op_errno = EINVAL;
 
-        ioc_local_t *local = NULL;
+        GF_ASSERT (frame);
+        GF_VALIDATE_OR_GOTO (frame->this->name, this, unwind);
 
         local = GF_CALLOC (1, sizeof (ioc_local_t), gf_ioc_mt_ioc_local_t);
         if (local == NULL) {
-                gf_log (this->name, GF_LOG_ERROR, "out of memory");
-                STACK_UNWIND_STRICT (open, frame, -1, ENOMEM, NULL);
-                return 0;
+                op_errno = ENOMEM;
+                goto unwind;
         }
 
         local->flags = flags;
@@ -824,7 +1028,12 @@ ioc_open (call_frame_t *frame, xlator_t *this, loc_t *loc, int32_t flags,
                     FIRST_CHILD(this)->fops->open, loc, flags, fd, wbflags);
 
         return 0;
+
+unwind:
+        STACK_UNWIND_STRICT (open, frame, -1, op_errno, NULL);
+        return 0;
 }
+
 
 /*
  * ioc_create - create fop for io cache
@@ -840,14 +1049,16 @@ int32_t
 ioc_create (call_frame_t *frame, xlator_t *this, loc_t *loc, int32_t flags,
             mode_t mode, fd_t *fd, dict_t *params)
 {
-        ioc_local_t *local = NULL;
+        ioc_local_t *local    = NULL;
+        int32_t      op_errno = EINVAL;
+
+        GF_ASSERT (frame);
+        GF_VALIDATE_OR_GOTO (frame->this->name, this, unwind);
 
         local = GF_CALLOC (1, sizeof (ioc_local_t), gf_ioc_mt_ioc_local_t);
         if (local == NULL) {
-                gf_log (this->name, GF_LOG_ERROR, "out of memory");
-                STACK_UNWIND_STRICT (create, frame, -1, ENOMEM, NULL, NULL,
-                                     NULL, NULL, NULL);
-                return 0;
+                op_errno = ENOMEM;
+                goto unwind;
         }
 
         local->flags = flags;
@@ -859,7 +1070,13 @@ ioc_create (call_frame_t *frame, xlator_t *this, loc_t *loc, int32_t flags,
                     fd, params);
 
         return 0;
+
+unwind:
+        STACK_UNWIND_STRICT (create, frame, -1, op_errno, NULL, NULL,
+                             NULL, NULL, NULL);
+        return 0;
 }
+
 
 /*
  * ioc_release - release fop for io cache
@@ -892,6 +1109,8 @@ ioc_readv_disabled_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
                         int32_t count, struct iatt *stbuf,
                         struct iobref *iobref)
 {
+        GF_ASSERT (frame);
+
         STACK_UNWIND_STRICT (readv, frame, op_ret, op_errno, vector, count,
                              stbuf, iobref);
         return 0;
@@ -902,6 +1121,9 @@ int32_t
 ioc_need_prune (ioc_table_t *table)
 {
         int64_t cache_difference = 0;
+        int32_t need_prune       = 0;
+
+        GF_VALIDATE_OR_GOTO ("io-cache", table, out);
 
         ioc_table_lock (table);
         {
@@ -909,11 +1131,12 @@ ioc_need_prune (ioc_table_t *table)
         }
         ioc_table_unlock (table);
 
-        if (cache_difference > 0)
-                return 1;
-        else
-                return 0;
+        need_prune = (cache_difference > 0);
+
+out:
+        return need_prune;
 }
+
 
 /*
  * ioc_dispatch_requests -
@@ -943,7 +1166,30 @@ ioc_dispatch_requests (call_frame_t *frame, ioc_inode_t *ioc_inode, fd_t *fd,
                                                 * if a page exists, do we need
                                                 * to validate it?
                                                 */
+
+        GF_VALIDATE_OR_GOTO ("io-cache", frame, out);
+
         local = frame->local;
+        GF_VALIDATE_OR_GOTO (frame->this->name, local, out);
+
+        if (fd == NULL) {
+                gf_log (frame->this->name, GF_LOG_WARNING,
+                        "fd is NULL");
+                local->op_ret = -1;
+                local->op_errno = EINVAL;
+                goto out;
+        }
+
+        if (ioc_inode == NULL) {
+                gf_log (frame->this->name, GF_LOG_WARNING,
+                        "io-cache context information is NULL in inode"
+                        "(ino:%"PRId64" gfid:%s)", fd->inode->ino,
+                        uuid_utoa (fd->inode->gfid));
+                local->op_ret = -1;
+                local->op_errno = EINVAL;
+                goto out;
+        }
+
         table = ioc_inode->table;
 
         rounded_offset = floor (offset, table->page_size);
@@ -961,6 +1207,11 @@ ioc_dispatch_requests (call_frame_t *frame, ioc_inode_t *ioc_inode, fd_t *fd,
          */
 
         might_need_validate = ioc_inode_need_revalidate (ioc_inode);
+        if (might_need_validate == -1) {
+                local->op_ret = -1;
+                local->op_errno = EINVAL;
+                goto out;
+        }
 
         while (trav_offset < rounded_end) {
                 ioc_inode_lock (ioc_inode);
@@ -978,9 +1229,6 @@ ioc_dispatch_requests (call_frame_t *frame, ioc_inode_t *ioc_inode, fd_t *fd,
                                 trav = ioc_page_create (ioc_inode, trav_offset);
                                 fault = 1;
                                 if (!trav) {
-                                        gf_log (frame->this->name,
-                                                GF_LOG_CRITICAL,
-                                                "out of memory");
                                         local->op_ret = -1;
                                         local->op_errno = ENOMEM;
                                         goto out;
@@ -1058,10 +1306,14 @@ ioc_dispatch_requests (call_frame_t *frame, ioc_inode_t *ioc_inode, fd_t *fd,
         }
 
 out:
-        ioc_frame_return (frame);
+        if (frame != NULL) {
+                ioc_frame_return (frame);
+        }
 
-        if (ioc_need_prune (ioc_inode->table)) {
-                ioc_prune (ioc_inode->table);
+        if (ioc_inode != NULL) {
+                if (ioc_need_prune (ioc_inode->table)) {
+                        ioc_prune (ioc_inode->table);
+                }
         }
 
         return;
@@ -1079,8 +1331,8 @@ out:
  *
  */
 int32_t
-ioc_readv (call_frame_t *frame, xlator_t *this, fd_t *fd,
-           size_t size, off_t offset)
+ioc_readv (call_frame_t *frame, xlator_t *this, fd_t *fd, size_t size,
+           off_t offset)
 {
         uint64_t     tmp_ioc_inode = 0;
         ioc_inode_t *ioc_inode     = NULL;
@@ -1088,11 +1340,11 @@ ioc_readv (call_frame_t *frame, xlator_t *this, fd_t *fd,
         uint32_t     weight        = 0;
         ioc_table_t *table         = NULL;
         uint32_t     num_pages     = 0;
-        int32_t      op_errno      = -1;
+        int32_t      op_errno      = EINVAL;
 
-        if (!this) {
-                goto out;
-        }
+        GF_ASSERT (frame);
+        GF_VALIDATE_OR_GOTO (frame->this->name, this, out);
+        GF_VALIDATE_OR_GOTO (frame->this->name, fd, out);
 
         inode_ctx_get (fd->inode, this, &tmp_ioc_inode);
         ioc_inode = (ioc_inode_t *)(long)tmp_ioc_inode;
@@ -1107,7 +1359,8 @@ ioc_readv (call_frame_t *frame, xlator_t *this, fd_t *fd,
 
         table = this->private;
         if (!table) {
-                gf_log (this->name, GF_LOG_ERROR, "table is null");
+                gf_log (this->name, GF_LOG_WARNING,
+                        "io-cache inode table is null");
                 op_errno = EINVAL;
                 goto out;
         }
@@ -1122,8 +1375,6 @@ ioc_readv (call_frame_t *frame, xlator_t *this, fd_t *fd,
                         table->mem_pool
                                 =  mem_pool_new (rbthash_entry_t, num_pages);
                         if (!table->mem_pool) {
-                                gf_log (this->name, GF_LOG_ERROR,
-                                        "Unable to allocate mem_pool");
                                 op_errno = ENOMEM;
                                 ioc_table_unlock (table);
                                 goto out;
@@ -1162,7 +1413,6 @@ ioc_readv (call_frame_t *frame, xlator_t *this, fd_t *fd,
         local = (ioc_local_t *) GF_CALLOC (1, sizeof (ioc_local_t),
                                            gf_ioc_mt_ioc_local_t);
         if (local == NULL) {
-                gf_log (this->name, GF_LOG_ERROR, "out of memory");
                 op_errno = ENOMEM;
                 goto out;
         }
@@ -1215,13 +1465,23 @@ ioc_writev_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
         ioc_local_t *local     = NULL;
         uint64_t     ioc_inode  = 0;
 
+        GF_ASSERT (frame);
+
         local = frame->local;
+        if (local == NULL) {
+                gf_log (frame->this->name, GF_LOG_WARNING, "local is NULL");
+                op_ret = -1;
+                op_errno = EINVAL;
+                goto out;
+        }
+
         inode_ctx_get (local->fd->inode, this, &ioc_inode);
 
         if (ioc_inode) {
                 ioc_inode_flush ((ioc_inode_t *)(long)ioc_inode);
         }
 
+out:
         STACK_UNWIND_STRICT (writev, frame, op_ret, op_errno, prebuf, postbuf);
         return 0;
 }
@@ -1244,16 +1504,18 @@ ioc_writev (call_frame_t *frame, xlator_t *this, fd_t *fd,
 {
         ioc_local_t *local     = NULL;
         uint64_t     ioc_inode = 0;
+        int32_t      op_errno  = EINVAL;
+
+        GF_ASSERT (frame);
+        GF_VALIDATE_OR_GOTO (frame->this->name, this, unwind);
+        GF_VALIDATE_OR_GOTO (frame->this->name, fd, unwind);
 
         local = GF_CALLOC (1, sizeof (ioc_local_t), gf_ioc_mt_ioc_local_t);
         if (local == NULL) {
-                gf_log (this->name, GF_LOG_ERROR, "out of memory");
-
-                STACK_UNWIND_STRICT (writev, frame, -1, ENOMEM, NULL, NULL);
-                return 0;
+                op_errno = ENOMEM;
+                goto unwind;
         }
 
-        /* TODO: why is it not fd_ref'ed */
         local->fd = fd;
         frame->local = local;
 
@@ -1266,6 +1528,10 @@ ioc_writev (call_frame_t *frame, xlator_t *this, fd_t *fd,
                     FIRST_CHILD(this)->fops->writev, fd, vector, count, offset,
                     iobref);
 
+        return 0;
+
+unwind:
+        STACK_UNWIND_STRICT (writev, frame, -1, op_errno, NULL, NULL);
         return 0;
 }
 
@@ -1285,6 +1551,7 @@ ioc_truncate_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
                   int32_t op_ret, int32_t op_errno, struct iatt *prebuf,
                   struct iatt *postbuf)
 {
+        GF_ASSERT (frame);
 
         STACK_UNWIND_STRICT (truncate, frame, op_ret, op_errno, prebuf,
                              postbuf);
@@ -1308,7 +1575,7 @@ ioc_ftruncate_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
                    int32_t op_ret, int32_t op_errno, struct iatt *prebuf,
                    struct iatt *postbuf)
 {
-
+        GF_ASSERT (frame);
         STACK_UNWIND_STRICT (ftruncate, frame, op_ret, op_errno, prebuf,
                              postbuf);
         return 0;
@@ -1329,6 +1596,10 @@ ioc_truncate (call_frame_t *frame, xlator_t *this, loc_t *loc, off_t offset)
 {
         uint64_t ioc_inode = 0;
 
+        GF_ASSERT (frame);
+        GF_VALIDATE_OR_GOTO (frame->this->name, this, unwind);
+        GF_VALIDATE_OR_GOTO (frame->this->name, loc, unwind);
+
         inode_ctx_get (loc->inode, this, &ioc_inode);
 
         if (ioc_inode) {
@@ -1337,6 +1608,10 @@ ioc_truncate (call_frame_t *frame, xlator_t *this, loc_t *loc, off_t offset)
 
         STACK_WIND (frame, ioc_truncate_cbk, FIRST_CHILD(this),
                     FIRST_CHILD(this)->fops->truncate, loc, offset);
+        return 0;
+
+unwind:
+        STACK_UNWIND_STRICT (truncate, frame, -1, EINVAL, NULL, NULL);
         return 0;
 }
 
@@ -1354,6 +1629,10 @@ ioc_ftruncate (call_frame_t *frame, xlator_t *this, fd_t *fd, off_t offset)
 {
         uint64_t ioc_inode = 0;
 
+        GF_ASSERT (frame);
+        GF_VALIDATE_OR_GOTO (frame->this->name, this, unwind);
+        GF_VALIDATE_OR_GOTO (frame->this->name, fd, unwind);
+
         inode_ctx_get (fd->inode, this, &ioc_inode);
 
         if (ioc_inode) {
@@ -1363,6 +1642,10 @@ ioc_ftruncate (call_frame_t *frame, xlator_t *this, fd_t *fd, off_t offset)
         STACK_WIND (frame, ioc_ftruncate_cbk, FIRST_CHILD(this),
                     FIRST_CHILD(this)->fops->ftruncate, fd, offset);
         return 0;
+
+unwind:
+        STACK_UNWIND_STRICT (ftruncate, frame, -1, EINVAL, NULL, NULL);
+        return 0;
 }
 
 
@@ -1370,6 +1653,7 @@ int32_t
 ioc_lk_cbk (call_frame_t *frame, void *cookie, xlator_t *this, int32_t op_ret,
             int32_t op_errno, struct gf_flock *lock)
 {
+        GF_ASSERT (frame);
         STACK_UNWIND_STRICT (lk, frame, op_ret, op_errno, lock);
         return 0;
 }
@@ -1380,15 +1664,21 @@ ioc_lk (call_frame_t *frame, xlator_t *this, fd_t *fd, int32_t cmd,
         struct gf_flock *lock)
 {
         ioc_inode_t  *ioc_inode = NULL;
-        uint64_t     tmp_inode = 0;
+        uint64_t      tmp_inode = 0;
+        int32_t       op_errno  = EINVAL;
+
+        GF_ASSERT (frame);
+        GF_VALIDATE_OR_GOTO (frame->this->name, this, unwind);
+        GF_VALIDATE_OR_GOTO (frame->this->name, fd, unwind);
 
         inode_ctx_get (fd->inode, this, &tmp_inode);
         ioc_inode = (ioc_inode_t *)(long)tmp_inode;
         if (!ioc_inode) {
-                gf_log (this->name, GF_LOG_DEBUG,
-                        "inode context is NULL: returning EBADFD");
-                STACK_UNWIND_STRICT (lk, frame, -1, EBADFD, NULL);
-                return 0;
+                gf_log (this->name, GF_LOG_WARNING,
+                        "io-cache context is NULL for inode (ino:%"PRId64" gfid:%s)",
+                        fd->inode->ino, uuid_utoa (fd->inode->gfid));
+                op_errno = EBADFD;
+                goto unwind;
         }
 
         ioc_inode_lock (ioc_inode);
@@ -1401,13 +1691,17 @@ ioc_lk (call_frame_t *frame, xlator_t *this, fd_t *fd, int32_t cmd,
                     FIRST_CHILD (this)->fops->lk, fd, cmd, lock);
 
         return 0;
+
+unwind:
+        STACK_UNWIND_STRICT (lk, frame, -1, op_errno, NULL);
+        return 0;
 }
 
 
 int32_t
 ioc_get_priority_list (const char *opt_str, struct list_head *first)
 {
-        int32_t              max_pri    = 1;
+        int32_t              max_pri    = -1;
         char                *tmp_str    = NULL;
         char                *tmp_str1   = NULL;
         char                *tmp_str2   = NULL;
@@ -1418,12 +1712,15 @@ ioc_get_priority_list (const char *opt_str, struct list_head *first)
         char                *string     = NULL;
         struct ioc_priority *curr       = NULL, *tmp = NULL;
 
+        GF_VALIDATE_OR_GOTO ("io-cache", opt_str, out);
+        GF_VALIDATE_OR_GOTO ("io-cache", first, out);
+
         string = gf_strdup (opt_str);
         if (string == NULL) {
-                max_pri = -1;
                 goto out;
         }
 
+        max_pri = 1;
         /* Get the pattern for cache priority.
          * "option priority *.jpg:1,abc*:2" etc
          */
@@ -1509,18 +1806,16 @@ mem_acct_init (xlator_t *this)
 {
         int     ret = -1;
 
-        if (!this) {
-                return ret;
-        }
+        GF_VALIDATE_OR_GOTO ("io-cache", this, out);
 
         ret = xlator_mem_acct_init (this, gf_ioc_mt_end + 1);
-
         if (ret != 0) {
-                gf_log (this->name, GF_LOG_ERROR, "Memory accounting init"
+                ret = -1;
+                gf_log (this->name, GF_LOG_WARNING, "memory accounting init"
                         "failed");
-                return ret;
         }
 
+out:
         return ret;
 }
 
@@ -1535,6 +1830,10 @@ validate_options (xlator_t *this, dict_t *options, char **op_errstr)
         uint64_t         cache_size        = 0;
         char            *cache_size_string = NULL;
         int              ret               = 0;
+
+        GF_VALIDATE_OR_GOTO_WITH_ERROR ("io-cache", this, out, ret, -1);
+        GF_VALIDATE_OR_GOTO_WITH_ERROR (this->name, options, out, ret, -1);
+        GF_VALIDATE_OR_GOTO_WITH_ERROR (this->name, op_errstr, out, ret, -1);
 
         if (dict_get (options, "cache-timeout")) {
                 cache_timeout = data_to_uint32 (dict_get (options,
@@ -1557,7 +1856,7 @@ validate_options (xlator_t *this, dict_t *options, char **op_errstr)
                         goto out;
                 }
 
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "Validated cache-timeout revalidate cache");
         }
 
@@ -1602,7 +1901,7 @@ validate_options (xlator_t *this, dict_t *options, char **op_errstr)
                         goto out;
                 }
 
-                gf_log (this->name, GF_LOG_DEBUG, "Validated "
+                gf_log (this->name, GF_LOG_WARNING, "Validated "
                         " cache-size %"PRIu64"", cache_size);
         }
 
@@ -1619,7 +1918,7 @@ validate_options (xlator_t *this, dict_t *options, char **op_errstr)
                         goto out;
                 }
 
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "Validated min-file-size %"PRIu64"",
                         min_file_size);
         }
@@ -1672,8 +1971,12 @@ reconfigure (xlator_t *this, dict_t *options)
         char            *cache_size_string = NULL;
         int              ret = 0;
 
-        if (!this || !this->private)
+        if (!this || !this->private) {
+                gf_log (this ? this->name : "io-cache", GF_LOG_WARNING,
+                        (this == NULL) ? "xlator object this is NULL"
+                        : "io-cache inode table is NULL");
                 goto out;
+        }
 
         table = this->private;
 
@@ -1701,7 +2004,7 @@ reconfigure (xlator_t *this, dict_t *options)
 
                         table->cache_timeout = cache_timeout;
 
-                        gf_log (this->name, GF_LOG_DEBUG,
+                        gf_log (this->name, GF_LOG_WARNING,
                                 "Reconfiguring %d seconds to"
                                 " revalidate cache", table->cache_timeout);
                 } else {
@@ -1748,7 +2051,7 @@ reconfigure (xlator_t *this, dict_t *options)
                         }
 
 
-                        gf_log (this->name, GF_LOG_DEBUG, "Reconfiguring "
+                        gf_log (this->name, GF_LOG_WARNING, "Reconfiguring "
                                 " cache-size %"PRIu64"", cache_size);
                         table->cache_size = cache_size;
                 }
@@ -1786,7 +2089,7 @@ reconfigure (xlator_t *this, dict_t *options)
                                 goto out;
                         }
 
-                        gf_log (this->name, GF_LOG_DEBUG,
+                        gf_log (this->name, GF_LOG_WARNING,
                                 "Reconfiguring min-file-size %"PRIu64"",
                                 table->min_file_size);
                 }
@@ -1805,7 +2108,7 @@ reconfigure (xlator_t *this, dict_t *options)
                         }
 
 
-                        gf_log (this->name, GF_LOG_DEBUG,
+                        gf_log (this->name, GF_LOG_WARNING,
                                 "Reconfiguring max-file-size %"PRIu64"",
                                 table->max_file_size);
                 }
@@ -1864,7 +2167,6 @@ init (xlator_t *this)
 
         table = (void *) GF_CALLOC (1, sizeof (*table), gf_ioc_mt_ioc_table_t);
         if (table == NULL) {
-                gf_log (this->name, GF_LOG_ERROR, "out of memory");
                 goto out;
         }
 
