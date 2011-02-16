@@ -191,6 +191,7 @@ enum gf_cbk_procnum {
 #define GLUSTERD1_MGMT_PROGRAM   1298433 /* Completely random */
 #define GLUSTERD1_MGMT_VERSION   1   /* 0.0.1 */
 #define GLUSTERD1_MGMT_PROCCNT   GD_MGMT_MAXVALUE
+#define GLUSTERD1_MGMT_VERSION2  2   /* 0.0.2 */
 
 #define GLUSTER3_1_CLI_PROGRAM   1298433 /* Completely random */
 #define GLUSTER3_1_CLI_VERSION   1   /* 0.0.1 */

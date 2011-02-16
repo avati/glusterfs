@@ -39,6 +39,7 @@
 
 extern rpc_clnt_prog_t *cli_rpc_prog;
 extern int      cli_op_ret;
+struct rpc_clnt_program cli3_1_prog2;
 
 char *cli_volume_type[] = {"Distribute",
                            "Stripe",
@@ -775,18 +776,18 @@ int
 gf_cli3_1_defrag_volume_cbk (struct rpc_req *req, struct iovec *iov,
                              int count, void *myframe)
 {
-        gf1_cli_defrag_vol_rsp  rsp     = {0,};
-        cli_local_t            *local   = NULL;
-        char                   *volname = NULL;
-        call_frame_t           *frame   = NULL;
-        int                     cmd     = 0;
-        int                     ret     = 0;
+        gf1_cli_defrag_vol_rsp2  rsp     = {0,};
+        cli_local_t             *local   = NULL;
+        char                    *volname = NULL;
+        call_frame_t            *frame   = NULL;
+        int                      cmd     = 0;
+        int                      ret     = 0;
 
         if (-1 == req->rpc_status) {
                 goto out;
         }
 
-        ret = gf_xdr_to_cli_defrag_vol_rsp (*iov, &rsp);
+        ret = gf_xdr_to_cli_defrag_vol_rsp2 (*iov, &rsp);
         if (ret < 0) {
                 gf_log ("", GF_LOG_ERROR, "error");
                 goto out;
@@ -802,24 +803,34 @@ gf_cli3_1_defrag_volume_cbk (struct rpc_req *req, struct iovec *iov,
                 cmd = local->u.defrag_vol.cmd;
         }
         if (cmd == GF_DEFRAG_CMD_START) {
-                cli_out ("starting rebalance on volume %s has been %s", volname,
-                         (rsp.op_ret) ? "unsuccessful": "successful");
-                if (rsp.op_ret && rsp.op_errno == EEXIST)
-                       cli_out ("Rebalance already started on volume %s", 
-                                volname);
+                if (rsp.op_ret && strcmp (rsp.op_errstr, ""))
+                        cli_out (rsp.op_errstr);
+                else
+                        cli_out ("starting rebalance on volume %s has been %s",
+                                 volname, (rsp.op_ret) ? "unsuccessful":
+                                 "successful");
         }
         if (cmd == GF_DEFRAG_CMD_STOP) {
-                if (rsp.op_ret == -1)
-                        cli_out ("rebalance volume %s stop failed", volname);
-                else
+                if (rsp.op_ret == -1) {
+                        if (strcmp (rsp.op_errstr, ""))
+                                cli_out (rsp.op_errstr);
+                        else
+                                cli_out ("rebalance volume %s stop failed",
+                                         volname);
+                } else {
                         cli_out ("stopped rebalance process of volume %s \n"
                                  "(after rebalancing %"PRId64" files totaling "
                                  "%"PRId64" bytes)", volname, rsp.files, rsp.size);
+                }
         }
         if (cmd == GF_DEFRAG_CMD_STATUS) {
-                if (rsp.op_ret == -1)
-                        cli_out ("failed to get the status of rebalance process");
-                else {
+                if (rsp.op_ret == -1) {
+                        if (strcmp (rsp.op_errstr, ""))
+                                cli_out (rsp.op_errstr);
+                        else
+                                cli_out ("failed to get the status of "
+                                         "rebalance process");
+                } else {
                         char *status = "unknown";
                         if (rsp.op_errno == 0)
                                 status = "not started";
@@ -854,6 +865,10 @@ gf_cli3_1_defrag_volume_cbk (struct rpc_req *req, struct iovec *iov,
         ret = rsp.op_ret;
 
 out:
+        if (rsp.op_errstr)
+                free (rsp.op_errstr); //malloced by xdr
+        if (rsp.volname)
+                free (rsp.volname); //malloced by xdr
         cli_cmd_broadcast_response (ret);
         return ret;
 }
@@ -1769,7 +1784,7 @@ gf_cli3_1_defrag_volume (call_frame_t *frame, xlator_t *this,
 
         req.volname = volname;
 
-        ret = cli_cmd_submit (&req, frame, cli_rpc_prog,
+        ret = cli_cmd_submit (&req, frame, &cli3_1_prog2,
                               GD_MGMT_CLI_DEFRAG_VOLUME, NULL,
                               gf_xdr_from_cli_defrag_vol_req,
                               this, gf_cli3_1_defrag_volume_cbk);
@@ -2681,4 +2696,12 @@ struct rpc_clnt_program cli3_1_prog = {
         .progver  = GLUSTER3_1_CLI_VERSION,
         .proctable  = gluster3_1_cli_actors,
         .numproc  = GLUSTER3_1_CLI_PROCCNT,
+};
+
+struct rpc_clnt_program cli3_1_prog2 = {
+        .progname = "CLI 3.1",
+        .prognum  = GLUSTERD1_MGMT_PROGRAM,
+        .progver  = GLUSTERD1_MGMT_VERSION2,
+        .proctable  = gluster3_1_cli_actors,
+        .numproc  = GLUSTERD1_MGMT_PROCCNT,
 };

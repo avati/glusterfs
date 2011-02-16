@@ -165,6 +165,17 @@ struct gf1_cli_get_vol_rsp {
         unsigned hyper   lookedup_files;
 }  ;
 
+
+ struct gf1_cli_defrag_vol_rsp2 {
+        int     op_ret;
+        int     op_errno;
+        string  op_errstr<>;
+        string  volname<>;
+        unsigned hyper   files;
+        unsigned hyper   size;
+        unsigned hyper   lookedup_files;
+}  ;
+
  struct gf1_cli_add_brick_req {
         string volname<>;
         int    count;

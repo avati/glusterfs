@@ -48,6 +48,7 @@
 
 static uuid_t glusterd_uuid;
 extern struct rpcsvc_program glusterd1_mop_prog;
+extern struct rpcsvc_program glusterd1_mop_prog2;
 extern struct rpcsvc_program gluster_handshake_prog;
 extern struct rpc_clnt_program glusterd3_1_mgmt_prog;
 extern struct rpcsvc_program gluster_pmap_prog;
@@ -349,6 +350,11 @@ init (xlator_t *this)
         }
 
         ret = glusterd_program_register (this, rpc, &glusterd1_mop_prog);
+        if (ret) {
+                goto out;
+        }
+
+        ret = glusterd_program_register (this, rpc, &glusterd1_mop_prog2);
         if (ret) {
                 goto out;
         }

@@ -1540,6 +1540,18 @@ struct rpcsvc_program glusterd1_mop_prog = {
         .actors    = glusterd1_mgmt_actors,
 };
 
+rpcsvc_actor_t glusterd1_mgmt_actors2[] = {
+        [GD_MGMT_CLI_DEFRAG_VOLUME] = { "CLI_DEFRAG_VOLUME", GD_MGMT_CLI_DEFRAG_VOLUME, glusterd_handle_defrag_volume2, NULL,NULL},
+};
+
+struct rpcsvc_program glusterd1_mop_prog2 = {
+        .progname  = "GlusterD0.0.2",
+        .prognum   = GLUSTERD1_MGMT_PROGRAM,
+        .progver   = GLUSTERD1_MGMT_VERSION2,
+        .numactors = GLUSTERD1_MGMT_PROCCNT,
+        .actors    = glusterd1_mgmt_actors2,
+};
+
 
 struct rpc_clnt_procedure glusterd3_1_clnt_mgmt_actors[GD_MGMT_MAXVALUE] = {
         [GD_MGMT_NULL]        = {"NULL", NULL },
