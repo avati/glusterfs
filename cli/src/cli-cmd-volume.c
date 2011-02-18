@@ -472,7 +472,7 @@ cli_cmd_volume_defrag_cbk (struct cli_state *state, struct cli_cmd_word *word,
         if (!dict)
                 goto out;
 
-        if (wordcount != 4) {
+        if (!((wordcount == 4) || (wordcount == 5))) {
                 cli_usage_out (word->pattern);
                 parse_error = 1;
                 goto out;
@@ -482,9 +482,19 @@ cli_cmd_volume_defrag_cbk (struct cli_state *state, struct cli_cmd_word *word,
         if (ret)
                 goto out;
 
-        ret = dict_set_str (dict, "command", (char *)words[3]);
-        if (ret)
-                goto out;
+        if (wordcount == 4) {
+                ret = dict_set_str (dict, "command", (char *)words[3]);
+                if (ret)
+                        goto out;
+        }
+        if (wordcount == 5) {
+                ret = dict_set_str (dict, "start-type", (char *)words[3]);
+                if (ret)
+                        goto out;
+                ret = dict_set_str (dict, "command", (char *)words[4]);
+                if (ret)
+                        goto out;
+        }
 
         proc = &cli_rpc_prog->proctable[GF1_CLI_DEFRAG_VOLUME];
 
@@ -954,7 +964,7 @@ struct cli_cmd volume_cmds[] = {
           cli_cmd_volume_remove_brick_cbk,
           "remove brick from volume <VOLNAME>"},
 
-        { "volume rebalance <VOLNAME> {start|stop|status}",
+        { "volume rebalance <VOLNAME> [fix-layout|migrate-data] {start|stop|status}",
           cli_cmd_volume_defrag_cbk,
           "rebalance operations"},
 
