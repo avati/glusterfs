@@ -320,10 +320,10 @@ collect_closest (trienode_t *node, void *data)
          *
          * (example courtesy of Richard Bann <richardbann at gmail.com>)
 
-        if (node->parent->eow && dist > trienode_get_dist (node->parent))
-                return 1;
+         if (node->parent->eow && dist > trienode_get_dist (node->parent))
+         return 1;
 
-         */
+        */
 
         if (nodevec->nodes[0] &&
             dist < trienode_get_dist (nodevec->nodes[0])) {
