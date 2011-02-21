@@ -72,6 +72,8 @@ client_submit_vec_request (xlator_t  *this, void *req, call_frame_t  *frame,
         if (req && sfunc) {
                 ret = sfunc (iov, req);
                 if (ret == -1) {
+                        gf_log_callingfn ("", GF_LOG_WARNING,
+                                          "XDR function failed");
                         goto out;
                 }
                 iov.iov_len = ret;
@@ -81,6 +83,9 @@ client_submit_vec_request (xlator_t  *this, void *req, call_frame_t  *frame,
         ret = rpc_clnt_submit (conf->rpc, prog, procnum, cbk, &iov, count,
                                payload, payloadcnt, iobref, frame, NULL, 0,
                                NULL, 0, NULL);
+        if (ret < 0) {
+                gf_log ("", GF_LOG_DEBUG, "rpc_clnt_submit failed");
+        }
 
         if (ret == 0) {
                 pthread_mutex_lock (&conf->rpc->conn.lock);
@@ -624,10 +629,10 @@ client3_1_flush_cbk (struct rpc_req *req, struct iovec *iov, int count,
 
         if (rsp.op_ret >= 0) {
                 /* Delete all saved locks of the owner issuing flush */
+                ret = delete_granted_locks_owner (local->fd, local->owner);
                 gf_log (this->name, GF_LOG_DEBUG,
-                        "Attempting to delete locks of owner=%llu",
-                        (long long unsigned) local->owner);
-                delete_granted_locks_owner (local->fd, local->owner);
+                        "deleting locks of owner (%llu) returned %d",
+                        (long long unsigned) local->owner, ret);
         }
 
         frame->local = NULL;
@@ -758,7 +763,7 @@ client3_1_getxattr_cbk (struct rpc_req *req, struct iovec *iov, int count,
 
                         ret = dict_unserialize (buf, dict_len, &dict);
                         if (ret < 0) {
-                                gf_log (frame->this->name, GF_LOG_DEBUG,
+                                gf_log (frame->this->name, GF_LOG_WARNING,
                                         "failed to unserialize xattr dict");
                                 op_errno = EINVAL;
                                 goto out;
@@ -835,7 +840,7 @@ client3_1_fgetxattr_cbk (struct rpc_req *req, struct iovec *iov, int count,
 
                         ret = dict_unserialize (buf, dict_len, &dict);
                         if (ret < 0) {
-                                gf_log (frame->this->name, GF_LOG_DEBUG,
+                                gf_log (frame->this->name, GF_LOG_WARNING,
                                         "failed to unserialize xattr dict");
                                 op_errno = EINVAL;
                                 goto out;
@@ -1198,7 +1203,7 @@ client3_1_xattrop_cbk (struct rpc_req *req, struct iovec *iov, int count,
                         GF_VALIDATE_OR_GOTO (frame->this->name, buf, out);
                         op_ret = dict_unserialize (buf, dict_len, &dict);
                         if (op_ret < 0) {
-                                gf_log (frame->this->name, GF_LOG_DEBUG,
+                                gf_log (frame->this->name, GF_LOG_WARNING,
                                         "failed to unserialize xattr dict");
                                 op_errno = EINVAL;
                                 goto out;
@@ -1277,7 +1282,7 @@ client3_1_fxattrop_cbk (struct rpc_req *req, struct iovec *iov, int count,
                         GF_VALIDATE_OR_GOTO (frame->this->name, buf, out);
                         op_ret = dict_unserialize (buf, dict_len, &dict);
                         if (op_ret < 0) {
-                                gf_log (frame->this->name, GF_LOG_DEBUG,
+                                gf_log (frame->this->name, GF_LOG_WARNING,
                                         "failed to unserialize xattr dict");
                                 op_errno = EINVAL;
                                 goto out;
@@ -1907,7 +1912,7 @@ client3_1_lookup_cbk (struct rpc_req *req, struct iovec *iov, int count,
 
                 ret = dict_unserialize (buf, rsp.dict.dict_len, &xattr);
                 if (ret < 0) {
-                        gf_log (frame->this->name, GF_LOG_DEBUG,
+                        gf_log (frame->this->name, GF_LOG_WARNING,
                                 "%s (%"PRId64"): failed to "
                                 "unserialize dictionary",
                                 local->loc.path, inode->ino);
@@ -1921,7 +1926,7 @@ client3_1_lookup_cbk (struct rpc_req *req, struct iovec *iov, int count,
 
         if ((!uuid_is_null (inode->gfid))
             && (uuid_compare (stbuf.ia_gfid, inode->gfid) != 0)) {
-                gf_log (frame->this->name, GF_LOG_DEBUG,
+                gf_log (frame->this->name, GF_LOG_WARNING,
                         "gfid changed for %s", local->loc.path);
                 rsp.op_ret = -1;
                 rsp.op_errno = ESTALE;
@@ -2038,14 +2043,17 @@ client_fdctx_destroy (xlator_t *this, clnt_fd_ctx_t *fdctx)
         if (!fdctx)
                 goto out;
 
-        if (fdctx->remote_fd == -1)
+        if (fdctx->remote_fd == -1) {
+                gf_log (this->name, GF_LOG_DEBUG, "not a valid fd");
                 goto out;
+        }
 
         fr = create_frame (this, this->ctx->pool);
 
         if (fdctx->is_dir) {
                 gfs3_releasedir_req  req = {{0,},};
                 req.fd = fdctx->remote_fd;
+                gf_log (this->name, GF_LOG_INFO, "sending releasedir on fd");
                 ret = client_submit_request (this, &req, fr, &clnt3_1_fop_prog,
                                              GFS3_OP_RELEASEDIR,
                                              client3_1_releasedir_cbk,
@@ -2054,6 +2062,7 @@ client_fdctx_destroy (xlator_t *this, clnt_fd_ctx_t *fdctx)
         } else {
                 gfs3_release_req  req = {{0,},};
                 req.fd = fdctx->remote_fd;
+                gf_log (this->name, GF_LOG_INFO, "sending release on fd");
                 ret = client_submit_request (this, &req, fr, &clnt3_1_fop_prog,
                                              GFS3_OP_RELEASE,
                                              client3_1_release_cbk, NULL,
@@ -2232,15 +2241,11 @@ client3_1_lookup (call_frame_t *frame, xlator_t *this,
                 if (content != NULL) {
                         rsp_iobref = iobref_new ();
                         if (rsp_iobref == NULL) {
-                                gf_log (this->name, GF_LOG_ERROR,
-                                        "out of memory");
                                 goto unwind;
                         }
 
                         rsp_iobuf = iobuf_get (this->ctx->iobuf_pool);
                         if (rsp_iobuf == NULL) {
-                                gf_log (this->name, GF_LOG_ERROR,
-                                        "out of memory");
                                 goto unwind;
                         }
 
@@ -2260,7 +2265,7 @@ client3_1_lookup (call_frame_t *frame, xlator_t *this,
                                                    &req.dict.dict_val,
                                                    &dict_len);
                 if (ret < 0) {
-                        gf_log (this->name, GF_LOG_DEBUG,
+                        gf_log (this->name, GF_LOG_WARNING,
                                 "failed to get serialized length of dict");
                         op_errno = EINVAL;
                         goto unwind;
@@ -2292,6 +2297,8 @@ client3_1_lookup (call_frame_t *frame, xlator_t *this,
         return 0;
 
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
+
         if (frame)
                 frame->local = NULL;
 
@@ -2348,6 +2355,7 @@ client3_1_stat (call_frame_t *frame, xlator_t *this,
 
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (stat, frame, -1, op_errno, NULL);
         return 0;
 }
@@ -2388,6 +2396,7 @@ client3_1_truncate (call_frame_t *frame, xlator_t *this,
         }
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (truncate, frame, -1, op_errno, NULL, NULL);
         return 0;
 }
@@ -2418,7 +2427,7 @@ client3_1_ftruncate (call_frame_t *frame, xlator_t *this,
         pthread_mutex_unlock (&conf->lock);
 
         if (fdctx == NULL) {
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "(%"PRId64"): failed to get fd ctx. EBADFD",
                         args->fd->inode->ino);
                 op_errno = EBADFD;
@@ -2426,7 +2435,7 @@ client3_1_ftruncate (call_frame_t *frame, xlator_t *this,
         }
 
         if (fdctx->remote_fd == -1) {
-                gf_log (this->name, GF_LOG_DEBUG, "(%"PRId64"): failed to get"
+                gf_log (this->name, GF_LOG_WARNING, "(%"PRId64"): failed to get"
                         " fd ctx. EBADFD", args->fd->inode->ino);
                 op_errno = EBADFD;
                 goto unwind;
@@ -2446,6 +2455,7 @@ client3_1_ftruncate (call_frame_t *frame, xlator_t *this,
         }
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (ftruncate, frame, -1, op_errno, NULL, NULL);
         return 0;
 }
@@ -2488,6 +2498,7 @@ client3_1_access (call_frame_t *frame, xlator_t *this,
 
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (access, frame, -1, op_errno);
         return 0;
 }
@@ -2527,6 +2538,7 @@ client3_1_readlink (call_frame_t *frame, xlator_t *this,
 
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (readlink, frame, -1, op_errno, NULL, NULL);
         return 0;
 }
@@ -2568,6 +2580,7 @@ client3_1_unlink (call_frame_t *frame, xlator_t *this,
         }
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (unlink, frame, -1, op_errno, NULL, NULL);
         return 0;
 }
@@ -2608,6 +2621,7 @@ client3_1_rmdir (call_frame_t *frame, xlator_t *this,
         }
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (rmdir, frame, -1, op_errno, NULL, NULL);
         return 0;
 }
@@ -2651,7 +2665,7 @@ client3_1_symlink (call_frame_t *frame, xlator_t *this,
                                                    &req.dict.dict_val,
                                                    &dict_len);
                 if (ret < 0) {
-                        gf_log (this->name, GF_LOG_DEBUG,
+                        gf_log (this->name, GF_LOG_WARNING,
                                 "failed to get serialized length of dict");
                         op_errno = EINVAL;
                         goto unwind;
@@ -2674,6 +2688,7 @@ client3_1_symlink (call_frame_t *frame, xlator_t *this,
         }
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         if (frame)
                 frame->local = NULL;
 
@@ -2727,6 +2742,7 @@ client3_1_rename (call_frame_t *frame, xlator_t *this,
         }
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (rename, frame, -1, op_errno, NULL, NULL, NULL, NULL, NULL);
         return 0;
 }
@@ -2779,6 +2795,7 @@ client3_1_link (call_frame_t *frame, xlator_t *this,
         }
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (link, frame, -1, op_errno, NULL, NULL, NULL, NULL);
         return 0;
 }
@@ -2824,7 +2841,7 @@ client3_1_mknod (call_frame_t *frame, xlator_t *this,
                                                    &req.dict.dict_val,
                                                    &dict_len);
                 if (ret < 0) {
-                        gf_log (this->name, GF_LOG_DEBUG,
+                        gf_log (this->name, GF_LOG_WARNING,
                                 "failed to get serialized length of dict");
                         op_errno = EINVAL;
                         goto unwind;
@@ -2847,6 +2864,7 @@ client3_1_mknod (call_frame_t *frame, xlator_t *this,
         }
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         if (frame)
                 frame->local = NULL;
 
@@ -2900,7 +2918,7 @@ client3_1_mkdir (call_frame_t *frame, xlator_t *this,
                                                    &req.dict.dict_val,
                                                    &dict_len);
                 if (ret < 0) {
-                        gf_log (this->name, GF_LOG_DEBUG,
+                        gf_log (this->name, GF_LOG_WARNING,
                                 "failed to get serialized length of dict");
                         op_errno = EINVAL;
                         goto unwind;
@@ -2923,6 +2941,7 @@ client3_1_mkdir (call_frame_t *frame, xlator_t *this,
         }
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         if (frame)
                 frame->local = NULL;
 
@@ -2978,7 +2997,7 @@ client3_1_create (call_frame_t *frame, xlator_t *this,
                                                    &req.dict.dict_val,
                                                    &dict_len);
                 if (ret < 0) {
-                        gf_log (this->name, GF_LOG_DEBUG,
+                        gf_log (this->name, GF_LOG_WARNING,
                                 "failed to get serialized length of dict");
                         op_errno = EINVAL;
                         goto unwind;
@@ -3001,6 +3020,7 @@ client3_1_create (call_frame_t *frame, xlator_t *this,
         }
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         if (frame)
                 frame->local = NULL;
 
@@ -3062,6 +3082,7 @@ client3_1_open (call_frame_t *frame, xlator_t *this,
         }
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         if (frame)
                 frame->local = NULL;
 
@@ -3102,7 +3123,7 @@ client3_1_readv (call_frame_t *frame, xlator_t *this,
         pthread_mutex_unlock (&conf->lock);
 
         if (fdctx == NULL) {
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "(%"PRId64"): failed to get fd ctx. EBADFD",
                         args->fd->inode->ino);
                 op_errno = EBADFD;
@@ -3110,7 +3131,7 @@ client3_1_readv (call_frame_t *frame, xlator_t *this,
         }
 
         if (fdctx->remote_fd == -1) {
-                gf_log (this->name, GF_LOG_DEBUG, "(%"PRId64"): failed to get"
+                gf_log (this->name, GF_LOG_WARNING, "(%"PRId64"): failed to get"
                         " fd ctx. EBADFD", args->fd->inode->ino);
                 op_errno = EBADFD;
                 goto unwind;
@@ -3142,7 +3163,7 @@ client3_1_readv (call_frame_t *frame, xlator_t *this,
         rsp_iobuf = NULL;
 
         if (args->size > rsp_vec.iov_len) {
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "read-size (%lu) is bigger than iobuf size (%lu)",
                         (unsigned long)args->size,
                         (unsigned long)rsp_vec.iov_len);
@@ -3173,6 +3194,7 @@ client3_1_readv (call_frame_t *frame, xlator_t *this,
 
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         if (rsp_iobuf) {
                 iobuf_unref (rsp_iobuf);
         }
@@ -3209,7 +3231,7 @@ client3_1_writev (call_frame_t *frame, xlator_t *this, void *data)
         pthread_mutex_unlock (&conf->lock);
 
         if (fdctx == NULL) {
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "(%"PRId64"): failed to get fd ctx. EBADFD",
                         args->fd->inode->ino);
                 op_errno = EBADFD;
@@ -3217,7 +3239,7 @@ client3_1_writev (call_frame_t *frame, xlator_t *this, void *data)
         }
 
         if (fdctx->remote_fd == -1) {
-                gf_log (this->name, GF_LOG_DEBUG, "(%"PRId64"): failed to get"
+                gf_log (this->name, GF_LOG_WARNING, "(%"PRId64"): failed to get"
                         " fd ctx. EBADFD", args->fd->inode->ino);
                 op_errno = EBADFD;
                 goto unwind;
@@ -3236,6 +3258,7 @@ client3_1_writev (call_frame_t *frame, xlator_t *this, void *data)
 
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (writev, frame, -1, op_errno, NULL, NULL);
         return 0;
 }
@@ -3266,7 +3289,7 @@ client3_1_flush (call_frame_t *frame, xlator_t *this,
         pthread_mutex_unlock (&conf->lock);
 
         if (fdctx == NULL) {
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "(%"PRId64"): failed to get fd ctx. EBADFD",
                         args->fd->inode->ino);
                 op_errno = EBADFD;
@@ -3274,7 +3297,7 @@ client3_1_flush (call_frame_t *frame, xlator_t *this,
         }
 
         if (fdctx->remote_fd == -1) {
-                gf_log (this->name, GF_LOG_DEBUG, "(%"PRId64"): failed to get"
+                gf_log (this->name, GF_LOG_WARNING, "(%"PRId64"): failed to get"
                         " fd ctx. EBADFD", args->fd->inode->ino);
                 op_errno = EBADFD;
                 goto unwind;
@@ -3307,6 +3330,7 @@ client3_1_flush (call_frame_t *frame, xlator_t *this,
         }
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (flush, frame, -1, op_errno);
         return 0;
 }
@@ -3337,7 +3361,7 @@ client3_1_fsync (call_frame_t *frame, xlator_t *this,
         pthread_mutex_unlock (&conf->lock);
 
         if (fdctx == NULL) {
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "(%"PRId64"): failed to get fd ctx. EBADFD",
                         args->fd->inode->ino);
                 op_errno = EBADFD;
@@ -3345,7 +3369,7 @@ client3_1_fsync (call_frame_t *frame, xlator_t *this,
         }
 
         if (fdctx->remote_fd == -1) {
-                gf_log (this->name, GF_LOG_DEBUG, "(%"PRId64"): failed to get"
+                gf_log (this->name, GF_LOG_WARNING, "(%"PRId64"): failed to get"
                         " fd ctx. EBADFD", args->fd->inode->ino);
                 op_errno = EBADFD;
                 goto unwind;
@@ -3364,6 +3388,7 @@ client3_1_fsync (call_frame_t *frame, xlator_t *this,
         }
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (fsync, frame, -1, op_errno, NULL, NULL);
         return 0;
 }
@@ -3394,7 +3419,7 @@ client3_1_fstat (call_frame_t *frame, xlator_t *this,
         pthread_mutex_unlock (&conf->lock);
 
         if (fdctx == NULL) {
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "(%"PRId64"): failed to get fd ctx. EBADFD",
                         args->fd->inode->ino);
                 op_errno = EBADFD;
@@ -3402,7 +3427,7 @@ client3_1_fstat (call_frame_t *frame, xlator_t *this,
         }
 
         if (fdctx->remote_fd == -1) {
-                gf_log (this->name, GF_LOG_DEBUG, "(%"PRId64"): failed to get"
+                gf_log (this->name, GF_LOG_WARNING, "(%"PRId64"): failed to get"
                         " fd ctx. EBADFD", args->fd->inode->ino);
                 op_errno = EBADFD;
                 goto unwind;
@@ -3420,6 +3445,7 @@ client3_1_fstat (call_frame_t *frame, xlator_t *this,
         }
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (fstat, frame, -1, op_errno, NULL);
         return 0;
 }
@@ -3469,6 +3495,7 @@ client3_1_opendir (call_frame_t *frame, xlator_t *this,
         }
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         if (frame)
                 frame->local = NULL;
         STACK_UNWIND_STRICT (opendir, frame, -1, op_errno, NULL);
@@ -3502,7 +3529,7 @@ client3_1_fsyncdir (call_frame_t *frame, xlator_t *this, void *data)
         pthread_mutex_unlock (&conf->lock);
 
         if (fdctx == NULL) {
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "(%"PRId64"): failed to get fd ctx. EBADFD",
                         args->fd->inode->ino);
                 op_errno = EBADFD;
@@ -3510,7 +3537,7 @@ client3_1_fsyncdir (call_frame_t *frame, xlator_t *this, void *data)
         }
 
         if (fdctx->remote_fd == -1) {
-                gf_log (this->name, GF_LOG_DEBUG, "(%"PRId64"): failed to get"
+                gf_log (this->name, GF_LOG_WARNING, "(%"PRId64"): failed to get"
                         " fd ctx. EBADFD", args->fd->inode->ino);
                 op_errno = EBADFD;
                 goto unwind;
@@ -3531,6 +3558,7 @@ client3_1_fsyncdir (call_frame_t *frame, xlator_t *this, void *data)
         }
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (fsyncdir, frame, -1, op_errno);
         return 0;
 }
@@ -3574,6 +3602,7 @@ client3_1_statfs (call_frame_t *frame, xlator_t *this,
         }
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (statfs, frame, -1, op_errno, NULL);
         return 0;
 }
@@ -3605,7 +3634,7 @@ client3_1_setxattr (call_frame_t *frame, xlator_t *this,
                                                    &req.dict.dict_val,
                                                    &dict_len);
                 if (ret < 0) {
-                        gf_log (this->name, GF_LOG_DEBUG,
+                        gf_log (this->name, GF_LOG_WARNING,
                                 "failed to get serialized dict");
                         op_errno = EINVAL;
                         goto unwind;
@@ -3631,6 +3660,7 @@ client3_1_setxattr (call_frame_t *frame, xlator_t *this,
 
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (setxattr, frame, -1, op_errno);
         if (req.dict.dict_val) {
                 GF_FREE (req.dict.dict_val);
@@ -3665,7 +3695,7 @@ client3_1_fsetxattr (call_frame_t *frame, xlator_t *this,
         pthread_mutex_unlock (&conf->lock);
 
         if (fdctx == NULL) {
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "(%"PRId64"): failed to get fd ctx. EBADFD",
                         args->fd->inode->ino);
                 op_errno = EBADFD;
@@ -3673,7 +3703,7 @@ client3_1_fsetxattr (call_frame_t *frame, xlator_t *this,
         }
 
         if (fdctx->remote_fd == -1) {
-                gf_log (this->name, GF_LOG_DEBUG, "(%"PRId64"): failed to get"
+                gf_log (this->name, GF_LOG_WARNING, "(%"PRId64"): failed to get"
                         " fd ctx. EBADFD", args->fd->inode->ino);
                 op_errno = EBADFD;
                 goto unwind;
@@ -3688,7 +3718,7 @@ client3_1_fsetxattr (call_frame_t *frame, xlator_t *this,
                                                    &req.dict.dict_val,
                                                    &dict_len);
                 if (ret < 0) {
-                        gf_log (this->name, GF_LOG_DEBUG,
+                        gf_log (this->name, GF_LOG_WARNING,
                                 "failed to get serialized dict");
                         goto unwind;
                 }
@@ -3710,6 +3740,7 @@ client3_1_fsetxattr (call_frame_t *frame, xlator_t *this,
 
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (fsetxattr, frame, -1, op_errno);
         if (req.dict.dict_val) {
                 GF_FREE (req.dict.dict_val);
@@ -3750,7 +3781,7 @@ client3_1_fgetxattr (call_frame_t *frame, xlator_t *this,
         pthread_mutex_unlock (&conf->lock);
 
         if (fdctx == NULL) {
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "(%"PRId64"): failed to get fd ctx. EBADFD",
                         args->fd->inode->ino);
                 op_errno = EBADFD;
@@ -3758,7 +3789,7 @@ client3_1_fgetxattr (call_frame_t *frame, xlator_t *this,
         }
 
         if (fdctx->remote_fd == -1) {
-                gf_log (this->name, GF_LOG_DEBUG, "(%"PRId64"): failed to get"
+                gf_log (this->name, GF_LOG_WARNING, "(%"PRId64"): failed to get"
                         " fd ctx. EBADFD", args->fd->inode->ino);
                 op_errno = EBADFD;
                 goto unwind;
@@ -3820,6 +3851,7 @@ client3_1_fgetxattr (call_frame_t *frame, xlator_t *this,
 
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         local = frame->local;
         frame->local = NULL;
 
@@ -3928,7 +3960,7 @@ client3_1_getxattr (call_frame_t *frame, xlator_t *this,
                                                  args->loc->inode,
                                                  dict);
                         if (ret) {
-                                gf_log (this->name, GF_LOG_DEBUG,
+                                gf_log (this->name, GF_LOG_WARNING,
                                         "Client dump locks failed");
                                 op_ret = -1;
                                 op_errno = EINVAL;
@@ -3954,6 +3986,7 @@ client3_1_getxattr (call_frame_t *frame, xlator_t *this,
 
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         local = frame->local;
         frame->local = NULL;
         client_local_wipe (local);
@@ -4040,7 +4073,7 @@ client3_1_xattrop (call_frame_t *frame, xlator_t *this,
                                                    &req.dict.dict_val,
                                                    &dict_len);
                 if (ret < 0) {
-                        gf_log (this->name, GF_LOG_DEBUG,
+                        gf_log (this->name, GF_LOG_WARNING,
                                 "failed to get serialized dict");
                         op_errno = EINVAL;
                         goto unwind;
@@ -4067,6 +4100,7 @@ client3_1_xattrop (call_frame_t *frame, xlator_t *this,
         }
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         local = frame->local;
         frame->local = NULL;
 
@@ -4122,7 +4156,7 @@ client3_1_fxattrop (call_frame_t *frame, xlator_t *this,
         pthread_mutex_unlock (&conf->lock);
 
         if (fdctx == NULL) {
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "(%"PRId64"): failed to get fd ctx. EBADFD",
                         args->fd->inode->ino);
                 op_errno = EBADFD;
@@ -4130,7 +4164,7 @@ client3_1_fxattrop (call_frame_t *frame, xlator_t *this,
         }
 
         if (fdctx->remote_fd == -1) {
-                gf_log (this->name, GF_LOG_DEBUG, "(%"PRId64"): failed to get"
+                gf_log (this->name, GF_LOG_WARNING, "(%"PRId64"): failed to get"
                         " fd ctx. EBADFD", args->fd->inode->ino);
                 op_errno = EBADFD;
                 goto unwind;
@@ -4181,7 +4215,7 @@ client3_1_fxattrop (call_frame_t *frame, xlator_t *this,
                                                    &req.dict.dict_val,
                                                    &dict_len);
                 if (ret < 0) {
-                        gf_log (this->name, GF_LOG_DEBUG,
+                        gf_log (this->name, GF_LOG_WARNING,
                                 "failed to get serialized dict");
                         goto unwind;
                 }
@@ -4204,6 +4238,7 @@ client3_1_fxattrop (call_frame_t *frame, xlator_t *this,
 
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         local = frame->local;
         frame->local = NULL;
 
@@ -4264,6 +4299,7 @@ client3_1_removexattr (call_frame_t *frame, xlator_t *this,
 
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (removexattr, frame, -1, op_errno);
         return 0;
 }
@@ -4303,7 +4339,7 @@ client3_1_lk (call_frame_t *frame, xlator_t *this,
         pthread_mutex_unlock (&conf->lock);
 
         if (fdctx == NULL) {
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "(%"PRId64"): failed to get fd ctx. EBADFD",
                         args->fd->inode->ino);
                 op_errno = EBADFD;
@@ -4311,7 +4347,7 @@ client3_1_lk (call_frame_t *frame, xlator_t *this,
         }
 
         if (fdctx->remote_fd == -1) {
-                gf_log (this->name, GF_LOG_DEBUG, "(%"PRId64"): failed to get"
+                gf_log (this->name, GF_LOG_WARNING, "(%"PRId64"): failed to get"
                         " fd ctx. EBADFD", args->fd->inode->ino);
                 op_errno = EBADFD;
                 goto unwind;
@@ -4320,8 +4356,9 @@ client3_1_lk (call_frame_t *frame, xlator_t *this,
         ret = client_cmd_to_gf_cmd (args->cmd, &gf_cmd);
         if (ret) {
                 op_errno = EINVAL;
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "Unknown cmd (%d)!", gf_cmd);
+                goto unwind;
         }
 
         switch (args->flock->l_type) {
@@ -4356,6 +4393,7 @@ client3_1_lk (call_frame_t *frame, xlator_t *this,
 
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (lk, frame, -1, op_errno, NULL);
         return 0;
 }
@@ -4388,7 +4426,7 @@ client3_1_inodelk (call_frame_t *frame, xlator_t *this,
         else if (args->cmd == F_SETLKW || args->cmd == F_SETLKW64)
                 gf_cmd = GF_LK_SETLKW;
         else {
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "Unknown cmd (%d)!", gf_cmd);
                 op_errno = EINVAL;
                 goto unwind;
@@ -4426,6 +4464,7 @@ client3_1_inodelk (call_frame_t *frame, xlator_t *this,
 
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (inodelk, frame, -1, op_errno);
         return 0;
 }
@@ -4458,7 +4497,7 @@ client3_1_finodelk (call_frame_t *frame, xlator_t *this,
         pthread_mutex_unlock (&conf->lock);
 
         if (fdctx == NULL) {
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "(%"PRId64"): failed to get fd ctx. EBADFD",
                         args->fd->inode->ino);
                 op_errno = EBADFD;
@@ -4466,7 +4505,7 @@ client3_1_finodelk (call_frame_t *frame, xlator_t *this,
         }
 
         if (fdctx->remote_fd == -1) {
-                gf_log (this->name, GF_LOG_DEBUG, "(%"PRId64"): failed to get"
+                gf_log (this->name, GF_LOG_WARNING, "(%"PRId64"): failed to get"
                         " fd ctx. EBADFD", args->fd->inode->ino);
                 op_errno = EBADFD;
                 goto unwind;
@@ -4479,7 +4518,7 @@ client3_1_finodelk (call_frame_t *frame, xlator_t *this,
         else if (args->cmd == F_SETLKW || args->cmd == F_SETLKW64)
                 gf_cmd = GF_LK_SETLKW;
         else {
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "Unknown cmd (%d)!", gf_cmd);
                 goto unwind;
         }
@@ -4514,6 +4553,7 @@ client3_1_finodelk (call_frame_t *frame, xlator_t *this,
 
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (finodelk, frame, -1, op_errno);
         return 0;
 }
@@ -4562,6 +4602,7 @@ client3_1_entrylk (call_frame_t *frame, xlator_t *this,
 
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (entrylk, frame, -1, op_errno);
         return 0;
 }
@@ -4592,7 +4633,7 @@ client3_1_fentrylk (call_frame_t *frame, xlator_t *this,
         pthread_mutex_unlock (&conf->lock);
 
         if (fdctx == NULL) {
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "(%"PRId64"): failed to get fd ctx. EBADFD",
                         args->fd->inode->ino);
                 op_errno = EBADFD;
@@ -4600,7 +4641,7 @@ client3_1_fentrylk (call_frame_t *frame, xlator_t *this,
         }
 
         if (fdctx->remote_fd == -1) {
-                gf_log (this->name, GF_LOG_DEBUG, "(%"PRId64"): failed to get"
+                gf_log (this->name, GF_LOG_WARNING, "(%"PRId64"): failed to get"
                         " fd ctx. EBADFD", args->fd->inode->ino);
                 op_errno = EBADFD;
                 goto unwind;
@@ -4628,6 +4669,7 @@ client3_1_fentrylk (call_frame_t *frame, xlator_t *this,
 
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (fentrylk, frame, -1, op_errno);
         return 0;
 }
@@ -4657,7 +4699,7 @@ client3_1_rchecksum (call_frame_t *frame, xlator_t *this,
         pthread_mutex_unlock (&conf->lock);
 
         if (fdctx == NULL) {
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "(%"PRId64"): failed to get fd ctx. EBADFD",
                         args->fd->inode->ino);
                 op_errno = EBADFD;
@@ -4665,7 +4707,7 @@ client3_1_rchecksum (call_frame_t *frame, xlator_t *this,
         }
 
         if (fdctx->remote_fd == -1) {
-                gf_log (this->name, GF_LOG_DEBUG, "(%"PRId64"): failed to get"
+                gf_log (this->name, GF_LOG_WARNING, "(%"PRId64"): failed to get"
                         " fd ctx. EBADFD", args->fd->inode->ino);
                 op_errno = EBADFD;
                 goto unwind;
@@ -4687,6 +4729,7 @@ client3_1_rchecksum (call_frame_t *frame, xlator_t *this,
 
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (rchecksum, frame, -1, op_errno, 0, NULL);
         return 0;
 }
@@ -4725,7 +4768,7 @@ client3_1_readdir (call_frame_t *frame, xlator_t *this,
         pthread_mutex_unlock (&conf->lock);
 
         if (fdctx == NULL) {
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "(%"PRId64"): failed to get fd ctx. EBADFD",
                         args->fd->inode->ino);
                 op_errno = EBADFD;
@@ -4733,7 +4776,7 @@ client3_1_readdir (call_frame_t *frame, xlator_t *this,
         }
 
         if (fdctx->remote_fd == -1) {
-                gf_log (this->name, GF_LOG_DEBUG, "(%"PRId64"): failed to get"
+                gf_log (this->name, GF_LOG_WARNING, "(%"PRId64"): failed to get"
                         " fd ctx. EBADFD", args->fd->inode->ino);
                 op_errno = EBADFD;
                 goto unwind;
@@ -4798,6 +4841,7 @@ client3_1_readdir (call_frame_t *frame, xlator_t *this,
         return 0;
 
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         local = frame->local;
         frame->local = NULL;
         client_local_wipe (local);
@@ -4847,7 +4891,7 @@ client3_1_readdirp (call_frame_t *frame, xlator_t *this,
         pthread_mutex_unlock (&conf->lock);
 
         if (fdctx == NULL) {
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "(%"PRId64"): failed to get fd ctx. EBADFD",
                         args->fd->inode->ino);
                 op_errno = EBADFD;
@@ -4855,7 +4899,7 @@ client3_1_readdirp (call_frame_t *frame, xlator_t *this,
         }
 
         if (fdctx->remote_fd == -1) {
-                gf_log (this->name, GF_LOG_DEBUG, "(%"PRId64"): failed to get"
+                gf_log (this->name, GF_LOG_WARNING, "(%"PRId64"): failed to get"
                         " fd ctx. EBADFD", args->fd->inode->ino);
                 op_errno = EBADFD;
                 goto unwind;
@@ -4919,6 +4963,7 @@ client3_1_readdirp (call_frame_t *frame, xlator_t *this,
 
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         local = frame->local;
         frame->local = NULL;
         client_local_wipe (local);
@@ -4973,6 +5018,7 @@ client3_1_setattr (call_frame_t *frame, xlator_t *this,
 
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (setattr, frame, -1, op_errno, NULL, NULL);
         return 0;
 }
@@ -5000,7 +5046,7 @@ client3_1_fsetattr (call_frame_t *frame, xlator_t *this, void *data)
         pthread_mutex_unlock (&conf->lock);
 
         if (fdctx == NULL) {
-                gf_log (this->name, GF_LOG_DEBUG,
+                gf_log (this->name, GF_LOG_WARNING,
                         "(%"PRId64"): failed to get fd ctx. EBADFD",
                         args->fd->inode->ino);
                 op_errno = EBADFD;
@@ -5008,7 +5054,7 @@ client3_1_fsetattr (call_frame_t *frame, xlator_t *this, void *data)
         }
 
         if (fdctx->remote_fd == -1) {
-                gf_log (this->name, GF_LOG_DEBUG, "(%"PRId64"): failed to get"
+                gf_log (this->name, GF_LOG_WARNING, "(%"PRId64"): failed to get"
                         " fd ctx. EBADFD", args->fd->inode->ino);
                 op_errno = EBADFD;
                 goto unwind;
@@ -5030,6 +5076,7 @@ client3_1_fsetattr (call_frame_t *frame, xlator_t *this, void *data)
 
         return 0;
 unwind:
+        gf_log ("", GF_LOG_WARNING, "failed to send the fop");
         STACK_UNWIND_STRICT (fsetattr, frame, -1, op_errno, NULL, NULL);
         return 0;
 }
