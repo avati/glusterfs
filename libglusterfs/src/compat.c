@@ -39,10 +39,7 @@
 #ifdef GF_SOLARIS_HOST_OS
 
 int
-solaris_fsetxattr(int fd,
-                  const char* key,
-                  const char *value,
-                  size_t size,
+solaris_fsetxattr(int fd, const char* key, const char *value, size_t size,
                   int flags)
 {
         int attrfd = -1;
@@ -66,10 +63,7 @@ solaris_fsetxattr(int fd,
 
 
 int
-solaris_fgetxattr(int fd,
-                  const char* key,
-                  char *value,
-                  size_t size)
+solaris_fgetxattr(int fd, const char* key, char *value, size_t size)
 {
         int attrfd = -1;
         int ret = 0;
@@ -85,12 +79,12 @@ solaris_fgetxattr(int fd,
                 }
                 close (attrfd);
         } else {
-                if (errno == ENOENT)
-                        errno = ENODATA;
                 if (errno != ENOENT)
-                        gf_log ("libglusterfs", GF_LOG_DEBUG,
+                        gf_log ("libglusterfs", GF_LOG_INFO,
                                 "Couldn't read extended attribute for the file %d (%d)",
                                 fd, errno);
+                if (errno == ENOENT)
+                        errno = ENODATA;
                 return -1;
         }
 
@@ -99,11 +93,8 @@ solaris_fgetxattr(int fd,
 
 
 int
-solaris_setxattr(const char *path,
-                 const char* key,
-                 const char *value,
-                 size_t size,
-                 int flags)
+solaris_setxattr(const char *path, const char* key, const char *value,
+                 size_t size, int flags)
 {
         int attrfd = -1;
         int ret = 0;
@@ -126,9 +117,7 @@ solaris_setxattr(const char *path,
 
 
 int
-solaris_listxattr(const char *path,
-                  char *list,
-                  size_t size)
+solaris_listxattr(const char *path, char *list, size_t size)
 {
         int attrdirfd = -1;
         ssize_t len = 0;
@@ -143,15 +132,18 @@ solaris_listxattr(const char *path,
                 if (dirptr) {
                         while ((dent = readdir(dirptr))) {
                                 size_t listlen = strlen(dent->d_name);
-                                if (!strcmp(dent->d_name, ".") || !strcmp(dent->d_name, "..")) {
+                                if (!strcmp(dent->d_name, ".") ||
+                                    !strcmp(dent->d_name, "..")) {
                                         /* we don't want "." and ".." here */
                                         continue;
                                 }
                                 if (size == 0) {
-                                        /* return the current size of the list of extended attribute names*/
+                                        /* return the current size of the list
+                                           of extended attribute names*/
                                         len += listlen + 1;
                                 } else {
-                                        /* check size and copy entrie + nul into list. */
+                                        /* check size and copy entry + null
+                                           into list. */
                                         if ((len + listlen + 1) > size) {
                                                 errno = ERANGE;
                                                 len = -1;
@@ -180,9 +172,7 @@ solaris_listxattr(const char *path,
 
 
 int
-solaris_flistxattr(int fd,
-                   char *list,
-                   size_t size)
+solaris_flistxattr(int fd, char *list, size_t size)
 {
         int attrdirfd = -1;
         ssize_t len = 0;
@@ -197,15 +187,18 @@ solaris_flistxattr(int fd,
                 if (dirptr) {
                         while ((dent = readdir(dirptr))) {
                                 size_t listlen = strlen(dent->d_name);
-                                if (!strcmp(dent->d_name, ".") || !strcmp(dent->d_name, "..")) {
+                                if (!strcmp(dent->d_name, ".") ||
+                                    !strcmp(dent->d_name, "..")) {
                                         /* we don't want "." and ".." here */
                                         continue;
                                 }
                                 if (size == 0) {
-                                        /* return the current size of the list of extended attribute names*/
+                                        /* return the current size of the list
+                                           of extended attribute names*/
                                         len += listlen + 1;
                                 } else {
-                                        /* check size and copy entrie + nul into list. */
+                                        /* check size and copy entry + null
+                                           into list. */
                                         if ((len + listlen + 1) > size) {
                                                 errno = ERANGE;
                                                 len = -1;
@@ -234,8 +227,7 @@ solaris_flistxattr(int fd,
 
 
 int
-solaris_removexattr(const char *path,
-                    const char* key)
+solaris_removexattr(const char *path, const char* key)
 {
         int ret = -1;
         int attrfd = attropen (path, ".", O_RDONLY, 0);
@@ -271,12 +263,12 @@ solaris_getxattr(const char *path,
                 }
                 close (attrfd);
         } else {
-                if (errno == ENOENT)
-                        errno = ENODATA;
                 if (errno != ENOENT)
-                        gf_log ("libglusterfs", GF_LOG_DEBUG,
+                        gf_log ("libglusterfs", GF_LOG_INFO,
                                 "Couldn't read extended attribute for the file %s (%d)",
                                 path, errno);
+                if (errno == ENOENT)
+                        errno = ENODATA;
                 return -1;
         }
         return ret;
