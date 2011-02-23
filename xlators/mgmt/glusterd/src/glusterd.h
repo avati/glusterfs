@@ -80,6 +80,7 @@ typedef enum glusterd_op_ {
 struct glusterd_store_iter_ {
         int     fd;
         FILE    *file;
+        char    filepath[PATH_MAX];
 };
 
 typedef struct glusterd_store_iter_     glusterd_store_iter_t;
@@ -154,6 +155,7 @@ typedef struct glusterd_defrag_info_ glusterd_defrag_info_t;
 typedef enum gf_transport_type_ {
         GF_TRANSPORT_TCP,       //DEFAULT
         GF_TRANSPORT_RDMA,
+        GF_TRANSPORT_BOTH_TCP_RDMA,
 } gf_transport_type;
 
 

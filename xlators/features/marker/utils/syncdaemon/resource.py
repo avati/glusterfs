@@ -428,12 +428,12 @@ class SSH(AbstractUrl, SlaveRemote):
             # in daemon), we just do a an ad-hoc linear put/get.
             i, o = ret
             inf = os.fdopen(i)
-            repce.send(o, None, 'ping')
+            repce.send(o, None, '__repce_version__')
             select.select((inf,), (), ())
             repce.recv(inf)
             # hack hack hack: store a global reference to the file
             # to save it from getting GC'd which implies closing it
-            gconf._in_fd_reference = inf
+            gconf.permanent_handles.append(inf)
             self.fd_pair = (i, o)
             return 'should'
 
