@@ -260,14 +260,16 @@ posix_lstat_with_gfid (xlator_t *this, const char *path, struct iatt *stbuf_p)
         priv = this->private;
 
         ret = lstat (path, &lstatbuf);
-        if (ret == -1)
+        if (ret == -1) {
+                gf_log (this->name, GF_LOG_TRACE, "%s %s", path,
+                        strerror (errno));
                 return -1;
-
+        }
         iatt_from_stat (&stbuf, &lstatbuf);
 
         ret = posix_fill_gfid_path (this, path, &stbuf);
         if (ret)
-                gf_log (this->name, GF_LOG_DEBUG, "failed to get gfid");
+                gf_log (this->name, GF_LOG_DEBUG, "failed to get gfid %s", path);
 
         if (stbuf_p)
                 *stbuf_p = stbuf;
@@ -541,8 +543,15 @@ posix_stat (call_frame_t *frame,
            file enough? */
         op_ret = gf_check_if_snap_path (this, loc, real_path, &buf,
                                         NULL, NULL);
-        if (!op_ret)
+        if (!op_ret) {
+                gf_log (this->name, GF_LOG_DEBUG, "%s is snapshot file",
+                        real_path);
                 goto out;
+        }
+
+        /* TODO: check for 'inode->ctx' instead of a syscall*/
+        if (sys_lgetxattr (real_path, GF_SNAP_FILE_KEY, NULL, 0) > 0)
+                strcat (real_path, "/HEAD/data");
 
         op_ret = posix_lstat_with_gfid (this, real_path, &buf);
         if (op_ret == -1) {
@@ -954,9 +963,8 @@ posix_opendir (call_frame_t *frame, xlator_t *this,
                 strcat (list_sym, "list");
 
                 list_snap_str = strstr (real_path, list_sym);
-                if (list_snap_str) {
-                        real_path[(list_snap_str - real_path)] = '\0';
-                }
+                if (list_snap_str)
+                        list_snap_str[0] = '\0';
         }
 
         dir = opendir (real_path);
@@ -978,7 +986,7 @@ posix_opendir (call_frame_t *frame, xlator_t *this,
                 goto out;
         }
 
-        pfd = GF_CALLOC (1, sizeof (*fd), gf_posix_mt_posix_fd);
+        pfd = GF_CALLOC (1, sizeof (*pfd), gf_posix_mt_posix_fd);
         if (!pfd) {
                 op_errno = errno;
                 gf_log (this->name, GF_LOG_ERROR,
@@ -991,7 +999,7 @@ posix_opendir (call_frame_t *frame, xlator_t *this,
 
         pfd->dir = dir;
         pfd->fd = dirfd (dir);
-        pfd->path = gf_strdup (loc->path);
+        pfd->path = gf_strdup (real_path);
         if (!pfd->path) {
                 gf_log (this->name, GF_LOG_ERROR,
                         "Out of memory.");
@@ -4511,16 +4519,23 @@ posix_do_readdir (call_frame_t *frame, xlator_t *this,
                 list_for_each_entry (tmp_entry, &entries.list, list) {
                         strcpy (entry_path + real_path_len + 1,
                                 tmp_entry->d_name);
-                        posix_lstat_with_gfid (this, entry_path, &stbuf);
+                        ret = posix_lstat_with_gfid (this, entry_path, &stbuf);
                         /* Check if its a snapshot */
                         if (!pfd->list_snapshots) {
                                 gf_check_and_change_snap_entry (this,
                                                                 entry_path,
                                                                 &stbuf, NULL);
                         } else {
-                                stbuf.ia_type  = IA_IFREG;
-                                stbuf.ia_prot  = ia_prot_from_st_mode (0400);
-                                stbuf.ia_nlink = 1;
+                                if (strcmp (tmp_entry->d_name, ".") &&
+                                    strcmp (tmp_entry->d_name, "..")) {
+                                        strcat (entry_path, "/data");
+                                        ret = posix_lstat_with_gfid (this,
+                                                                     entry_path,
+                                                                     &stbuf);
+                                        stbuf.ia_type  = IA_IFREG;
+                                        stbuf.ia_prot  = ia_prot_from_st_mode (0400);
+                                        stbuf.ia_nlink = 1;
+                                }
                         }
 
                         tmp_entry->d_stat = stbuf;

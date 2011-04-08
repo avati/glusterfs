@@ -348,7 +348,6 @@ gf_create_fresh_snapshot (xlator_t *this, loc_t *loc, const char *path,
                 if (ret) {
                         gf_log (this->name, GF_LOG_ERROR, "setting gfid on %s failed: %d",
                                 snap_path, ret);
-                        goto out;
                 }
 
                 ret = chmod (snap_path, 0400);
@@ -367,8 +366,11 @@ gf_create_fresh_snapshot (xlator_t *this, loc_t *loc, const char *path,
                 strcat (snap_path, "/HEAD");
 
                 ret = mkdir (snap_path, 0750);
-                if (ret)
+                if (ret) {
+                        gf_log (this->name, GF_LOG_ERROR, "%s: mkdir failed %s",
+                                snap_path, strerror (errno));
                         goto out;
+                }
 
                 ret = chown (snap_path, stbuf.st_uid, stbuf.st_gid);
                 if (ret) {
@@ -378,8 +380,11 @@ gf_create_fresh_snapshot (xlator_t *this, loc_t *loc, const char *path,
 
                 strcat (snap_path, "/data");
                 ret = mknod (snap_path, stbuf.st_mode, 0);
-                if (ret)
+                if (ret) {
+                        gf_log (this->name, GF_LOG_ERROR, "%s: mknod failed %s",
+                                snap_path, strerror (errno));
                         goto out;
+                }
 
                 ret = chown (snap_path, stbuf.st_uid, stbuf.st_gid);
                 if (ret) {
@@ -388,8 +393,11 @@ gf_create_fresh_snapshot (xlator_t *this, loc_t *loc, const char *path,
                 }
 
                 ret = truncate (snap_path, stbuf.st_size);
-                if (ret)
+                if (ret) {
+                        gf_log (this->name, GF_LOG_ERROR, "%s: truncate failed %s",
+                                snap_path, strerror (errno));
                         goto out;
+                }
 
                 ret = sys_lsetxattr (snap_path, GF_GFID_KEY, gfid, 16, 0);
                 if (ret) {
@@ -409,8 +417,12 @@ gf_create_fresh_snapshot (xlator_t *this, loc_t *loc, const char *path,
                 strcat (parent_path, snap_name);
 
                 ret = symlink (parent_path, snap_path);
-                if (ret)
+                if (ret) {
+                        gf_log (this->name, GF_LOG_ERROR,
+                                "%s: symlink (parent) failed %s",
+                                snap_path, strerror (errno));
                         goto out;
+                }
         }
 
         /* Open the fd if fd is found */
@@ -419,7 +431,7 @@ gf_create_fresh_snapshot (xlator_t *this, loc_t *loc, const char *path,
                                      inode_list) {
                         ret = fd_ctx_get (iter_fd, this, &tmp_pfd);
                         if (ret < 0) {
-                                gf_log (this->name, GF_LOG_DEBUG,
+                                gf_log (this->name, GF_LOG_ERROR,
                                         "pfd not found in fd's ctx");
                                 goto out;
                         }
@@ -439,11 +451,12 @@ out:
 
         if (ret) {
                 /* Revert back to normal file */
-                gf_log (this->name, GF_LOG_DEBUG, "something failed");
+                gf_log (this->name, GF_LOG_ERROR, "something failed");
         }
 
         if (!ret) {
                 /* In the inode context tell that, the snapshot is taken */
+                gf_log (this->name, GF_LOG_INFO, "snapshot successful");
                 gf_set_snapshot_flag_in_inode (this, loc);
         }
 
@@ -554,7 +567,6 @@ gf_create_another_snapshot (xlator_t *this, loc_t *loc, const char *path,
                 if (ret) {
                         gf_log (this->name, GF_LOG_ERROR, "setting gfid on %s failed: %d",
                                 snap_path, ret);
-                        goto out;
                 }
 
                 ret = chmod (snap_path, 0400);
@@ -975,7 +987,8 @@ gf_snap_readv (call_frame_t *frame, xlator_t *this, struct posix_fd *pfd,
 
         trav_off = offset;
         trav_size = size;
-        if ((size + offset) < stbuf.ia_size)
+
+        if (size > (stbuf.ia_size - offset))
                 trav_size = stbuf.ia_size - offset;
 
         do {
@@ -987,6 +1000,14 @@ gf_snap_readv (call_frame_t *frame, xlator_t *this, struct posix_fd *pfd,
                 if (tmp_size <= trav_size)
                         eob_flag = 0;
 
+                if (tmp_offset >= stbuf.ia_size) {
+                        gf_log (this->name, GF_LOG_DEBUG,
+                                "we are at the last block, send EOF");
+                        op_ret = 0;
+                        /* Hack to notify higher layers of EOF. */
+                        op_errno = ENOENT;
+                        goto done;
+                }
                 op_ret = lseek (_fd, tmp_offset, SEEK_SET);
                 if (op_ret == -1) {
                         op_errno = errno;
@@ -1014,6 +1035,12 @@ gf_snap_readv (call_frame_t *frame, xlator_t *this, struct posix_fd *pfd,
                         //priv->interval_read += op_ret;
                 }
                 UNLOCK (&priv->lock);
+
+                /* Hack to notify higher layers of EOF. */
+                if (stbuf.ia_size == 0)
+                        op_errno = ENOENT;
+                else if ((tmp_offset + tmp_size) == stbuf.ia_size)
+                        op_errno = ENOENT;
 
                 if ((trav_size == 0) || (op_ret < tmp_size) ||
                     ((offset + total_read) >= stbuf.ia_size)) {
@@ -2040,22 +2067,20 @@ __gf_snap_delete_root_snapshot (xlator_t *this, const char *path,
         if (ret <= 0) {
                 gf_log (this->name, GF_LOG_ERROR, "failed to get gfid of %s",
                         child_path);
-                goto out;
-        }
+        } else {
+                ret = sys_lremovexattr (snap_path, GF_GFID_KEY);
+                if (ret) {
+                        gf_log (this->name, GF_LOG_ERROR, "remove of gfid on %s failed",
+                                snap_path);
+                }
 
-        ret = sys_lremovexattr (snap_path, GF_GFID_KEY);
-        if (ret) {
-                gf_log (this->name, GF_LOG_ERROR, "remove of gfid on %s failed",
-                        snap_path);
-                goto out;
-        }
-
-        ret = sys_lsetxattr (snap_path, GF_GFID_KEY, gfid, 16, 0);
-        if (ret) {
-                gf_log (this->name, GF_LOG_ERROR,
-                        "setting gfid on %s failed: %d",
-                        snap_path, ret);
-                goto out;
+                ret = sys_lsetxattr (snap_path, GF_GFID_KEY, gfid, 16, 0);
+                if (ret) {
+                        gf_log (this->name, GF_LOG_ERROR,
+                                "setting gfid on %s failed: %d",
+                                snap_path, ret);
+                        goto out;
+                }
         }
 
         /* Ideally gfid should be preserved */
@@ -2080,6 +2105,8 @@ __gf_snap_delete_root_snapshot (xlator_t *this, const char *path,
                 gf_log (this->name, GF_LOG_DEBUG, "unlink on %s failed: %s",
                         child_path, strerror (errno));
         }
+
+        snprintf (snap_path, ZR_PATH_MAX, "%s/%s", path, snap_name);
 
         ret = rmdir (snap_path);
         if (ret) {
