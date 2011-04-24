@@ -55,8 +55,6 @@
 #include "list.h"
 #include "dict.h"
 
-/* TODO: when supporting posix acl, remove this definition */
-#define DISABLE_POSIX_ACL
 
 #if defined(GF_LINUX_HOST_OS) || defined(__NetBSD__)
 #define FUSE_OP_HIGH (FUSE_POLL + 1)
@@ -107,6 +105,7 @@ struct fuse_private {
 
         pid_t                client_pid;
         gf_boolean_t         client_pid_set;
+        gf_boolean_t         noacl;
 };
 typedef struct fuse_private fuse_private_t;
 

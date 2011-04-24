@@ -2333,6 +2333,9 @@ fuse_setxattr (xlator_t *this, fuse_in_header_t *finh, void *msg)
         fuse_state_t *state = NULL;
         char         *dict_value = NULL;
         int32_t       ret = -1;
+        struct fuse_private  *priv = NULL;
+
+        priv = this->private;
 
 #ifdef GF_DARWIN_HOST_OS
         if (fsi->position) {
@@ -2346,13 +2349,14 @@ fuse_setxattr (xlator_t *this, fuse_in_header_t *finh, void *msg)
         }
 #endif
 
-#ifdef DISABLE_POSIX_ACL
-        if (!strncmp (name, "system.", 7)) {
-                send_fuse_err (this, finh, EOPNOTSUPP);
-                GF_FREE (finh);
-                return;
+        if (priv->noacl) {
+                if ((strcmp (name, "system.posix_acl_access") == 0) ||
+                    (strcmp (name, "system.posix_acl_default") == 0)) {
+                        send_fuse_err (this, finh, EOPNOTSUPP);
+                        GF_FREE (finh);
+                        return;
+                }
         }
-#endif
 
         /* Check if the command is for changing the log
            level of process or specific xlator */
@@ -2537,9 +2541,13 @@ fuse_getxattr (xlator_t *this, fuse_in_header_t *finh, void *msg)
 {
         struct fuse_getxattr_in *fgxi = msg;
         char         *name = (char *)(fgxi + 1);
+        struct fuse_private     *priv = NULL;
 
         fuse_state_t *state = NULL;
         int32_t       ret = -1;
+
+
+        priv = this->private;
 
 #ifdef GF_DARWIN_HOST_OS
         if (fgxi->position) {
@@ -2561,13 +2569,14 @@ fuse_getxattr (xlator_t *this, fuse_in_header_t *finh, void *msg)
         }
 #endif
 
-#ifdef DISABLE_POSIX_ACL
-        if (!strncmp (name, "system.", 7)) {
-                send_fuse_err (this, finh, ENODATA);
-                GF_FREE (finh);
-                return;
+        if (priv->noacl) {
+                if ((strcmp (name, "system.posix_acl_access") == 0) ||
+                    (strcmp (name, "system.posix_acl_default") == 0)) {
+                        send_fuse_err (this, finh, ENOTSUP);
+                        GF_FREE (finh);
+                        return;
+                }
         }
-#endif
 
         GET_STATE (this, finh, state);
 
@@ -3589,6 +3598,13 @@ init (xlator_t *this_xl)
                 GF_ASSERT (ret == 0);
         }
 
+        priv->noacl = 0;
+        ret = dict_get_str (options, "noacl", &value_string);
+        if (ret == 0) {
+                ret = gf_string2boolean (value_string, &priv->noacl);
+                GF_ASSERT (ret == 0);
+        }
+
         priv->fuse_dump_fd = -1;
         ret = dict_get_str (options, "dump-fuse", &value_string);
         if (ret == 0) {
@@ -3637,11 +3653,18 @@ init (xlator_t *this_xl)
         if (!fsname)
                 fsname = "glusterfs";
 
+        if (priv->noacl) {
+                priv->fd = gf_fuse_mount (priv->mount_point, fsname,
+                                          "allow_other,default_permissions,"
+                                          "max_read=131072",
+                                          sync_mtab ? &ctx->mtab_pid : NULL);
+        } else {
+                priv->fd = gf_fuse_mount (priv->mount_point, fsname,
+                                          "allow_other,"
+                                          "max_read=131072",
+                                          sync_mtab ? &ctx->mtab_pid : NULL);
+        }
 
-        priv->fd = gf_fuse_mount (priv->mount_point, fsname,
-                                  "allow_other,default_permissions,"
-                                  "max_read=131072",
-                                  sync_mtab ? &ctx->mtab_pid : NULL);
         if (priv->fd == -1)
                 goto cleanup_exit;
 
