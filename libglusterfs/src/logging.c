@@ -30,6 +30,7 @@
 #include <locale.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "xlator.h"
 #include "logging.h"
@@ -57,6 +58,8 @@ FILE                   *gf_log_logfile;
 
 static char            *cmd_log_filename = NULL;
 static FILE            *cmdlogfile = NULL;
+
+FILE                   *glusterfs_consfp = NULL;
 
 void
 gf_log_logrotate (int signum)
@@ -130,6 +133,10 @@ gf_log_globals_init (void)
 int
 gf_log_init (const char *file)
 {
+        int logfd = -1;
+        int errfd = -1;
+        int confd = -1;
+
         if (!file){
                 fprintf (stderr, "ERROR: no filename specified\n");
                 return -1;
@@ -151,6 +158,23 @@ gf_log_init (const char *file)
 
         gf_log_logfile = logfile;
 
+        logfd = fileno (logfile);
+        errfd = fileno (stderr);
+
+        if (isatty (logfd) || !isatty (errfd))
+                goto out;
+
+        confd = dup (errfd);
+        if (confd == -1)
+                goto out;
+
+        glusterfs_consfp = fdopen (confd, "w");
+        if (!glusterfs_consfp) {
+                close (confd);
+                confd = -1;
+        }
+
+out:
         return 0;
 }
 
@@ -485,7 +509,10 @@ _gf_log (const char *domain, const char *file, const char *function, int line,
                                         "T", /* TRACE */
                                         ""};
 
-        if (!domain || !file || !function || !fmt) {
+        if (!domain || !(*domain))
+                domain = THIS->name;
+
+        if (!file || !function || !fmt) {
                 fprintf (stderr,
                          "logging: %s:%s():%d: invalid argument\n",
                          __FILE__, __PRETTY_FUNCTION__, __LINE__);
@@ -517,47 +544,50 @@ log:
 
         tm    = localtime (&tv.tv_sec);
 
+        va_start (ap, fmt);
+
+        strftime (timestr, 256, "%Y-%m-%d %H:%M:%S", tm);
+        snprintf (timestr + strlen (timestr), 256 - strlen (timestr),
+                  ".%"GF_PRI_SUSECONDS, tv.tv_usec);
+
+        basename = strrchr (file, '/');
+        if (basename)
+                basename++;
+        else
+                basename = file;
+
+        ret = gf_asprintf (&str1, "[%s] %s [%s:%d:%s] %d-%s: ",
+                           timestr, level_strings[level],
+                           basename, line, function,
+                           ((this->graph)?this->graph->id:0), domain);
+        if (ret == -1) {
+                goto unlock;
+        }
+
+        ret = vasprintf (&str2, fmt, ap);
+        if (ret == -1) {
+                goto unlock;
+        }
+
+        va_end (ap);
+
+        len = strlen (str1);
+        msg = GF_MALLOC (len + strlen (str2) + 1, gf_common_mt_char);
+
+        strcpy (msg, str1);
+        strcpy (msg + len, str2);
+
         pthread_mutex_lock (&logfile_mutex);
         {
-                va_start (ap, fmt);
-
-                strftime (timestr, 256, "%Y-%m-%d %H:%M:%S", tm);
-                snprintf (timestr + strlen (timestr), 256 - strlen (timestr),
-                          ".%"GF_PRI_SUSECONDS, tv.tv_usec);
-
-                basename = strrchr (file, '/');
-                if (basename)
-                        basename++;
-                else
-                        basename = file;
-
-                ret = gf_asprintf (&str1, "[%s] %s [%s:%d:%s] %d-%s: ",
-                                   timestr, level_strings[level],
-                                   basename, line, function,
-                                   ((this->graph)?this->graph->id:0), domain);
-                if (-1 == ret) {
-                        goto unlock;
-                }
-
-                ret = vasprintf (&str2, fmt, ap);
-                if (-1 == ret) {
-                        goto unlock;
-                }
-
-                va_end (ap);
-
-                len = strlen (str1);
-                msg = GF_MALLOC (len + strlen (str2) + 1, gf_common_mt_char);
-
-                strcpy (msg, str1);
-                strcpy (msg + len, str2);
-
                 if (logfile) {
                         fprintf (logfile, "%s\n", msg);
                         fflush (logfile);
                 } else {
                         fprintf (stderr, "%s\n", msg);
                 }
+
+                if (glusterfs_consfp && level <= GF_LOG_WARNING)
+                        fprintf (glusterfs_consfp, "%s\n", msg);
 
 #ifdef GF_LINUX_HOST_OS
                 /* We want only serious log in 'syslog', not our debug

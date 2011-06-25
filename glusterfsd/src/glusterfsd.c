@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2006-2010 Gluster, Inc. <http://www.gluster.com>
+  Copyright (c) 2006-2011 Gluster, Inc. <http://www.gluster.com>
   This file is part of GlusterFS.
 
   GlusterFS is free software; you can redistribute it and/or modify
@@ -337,7 +337,7 @@ err:
                 xlator_destroy (master);
         }
 
-        return -1;
+        return 1;
 }
 
 
@@ -787,6 +787,31 @@ reincarnate (int signum)
                         "volume initialization failed.");
 
         return;
+}
+
+
+void
+emancipate (glusterfs_ctx_t *ctx, int ret)
+{
+        extern FILE *glusterfs_consfp;
+        /* break free from the parent */
+        if (ctx->daemon_pipe[1] != -1) {
+                write (ctx->daemon_pipe[1], (void *) &ret, sizeof (ret));
+                close (ctx->daemon_pipe[1]);
+                ctx->daemon_pipe[1] = -1;
+        }
+
+        if (!glusterfs_consfp)
+                return;
+
+        gf_log_lock ();
+        {
+                if (glusterfs_consfp) {
+                        fclose (glusterfs_consfp);
+                        glusterfs_consfp = NULL;
+                }
+        }
+        gf_log_unlock();
 }
 
 
@@ -1348,6 +1373,7 @@ daemonize (glusterfs_ctx_t *ctx)
         int            ret = -1;
         cmd_args_t    *cmd_args = NULL;
         int            cstatus = 0;
+        int            err = 0;
 
         cmd_args = &ctx->cmd_args;
 
@@ -1361,15 +1387,36 @@ daemonize (glusterfs_ctx_t *ctx)
         if (cmd_args->debug_mode)
                 goto postfork;
 
+        ret = pipe (ctx->daemon_pipe);
+        if (ret) {
+                /* If pipe() fails, retain daemon_pipe[] = {-1, -1}
+                   and parent will just not wait for child status
+                */
+                ctx->daemon_pipe[0] = -1;
+                ctx->daemon_pipe[1] = -1;
+        }
+
         ret = os_daemon_return (0, 0);
         switch (ret) {
         case -1:
+                if (ctx->daemon_pipe[0] != -1) {
+                        close (ctx->daemon_pipe[0]);
+                        close (ctx->daemon_pipe[1]);
+                }
+
                 gf_log ("daemonize", GF_LOG_ERROR,
                         "Daemonization failed: %s", strerror(errno));
                 goto out;
         case 0:
+                /* child */
+                /* close read */
+                close (ctx->daemon_pipe[0]);
                 break;
         default:
+                /* parent */
+                /* close write */
+                close (ctx->daemon_pipe[1]);
+
                 if (ctx->mtab_pid > 0) {
                         ret = waitpid (ctx->mtab_pid, &cstatus, 0);
                         if (!(ret == ctx->mtab_pid && cstatus == 0)) {
@@ -1378,7 +1425,10 @@ daemonize (glusterfs_ctx_t *ctx)
                                 exit (1);
                         }
                 }
-                _exit (0);
+
+                err = 1;
+                read (ctx->daemon_pipe[0], (void *)&err, sizeof (err));
+                _exit (err);
         }
 
 postfork:
@@ -1460,7 +1510,8 @@ glusterfs_volumes_init (glusterfs_ctx_t *ctx)
 
         if (cmd_args->volfile_server) {
                 ret = glusterfs_mgmt_init (ctx);
-                goto out;
+                /* return, do not emancipate() yet */
+                return ret;
         }
 
         fp = get_volfp (ctx);
@@ -1477,6 +1528,7 @@ glusterfs_volumes_init (glusterfs_ctx_t *ctx)
                 goto out;
 
 out:
+        emancipate (ctx, ret);
         return ret;
 }
 
