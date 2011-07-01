@@ -30,6 +30,7 @@
 #define UINT64(ptr) ((uint64_t)((long)(ptr)))
 #define PTR(num) ((void *)((long)(num)))
 
+int setxattr_scrutiny (call_frame_t *frame, inode_t *inode, dict_t *xattr);
 
 int
 whitelisted_xattr (const char *key)
@@ -1422,6 +1423,74 @@ red:
 
 
 int
+posix_acl_xattrop_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+                       int op_ret, int op_errno, dict_t *xattr)
+{
+        STACK_UNWIND_STRICT (xattrop, frame, op_ret, op_errno, xattr);
+
+        return 0;
+}
+
+
+int
+posix_acl_xattrop (call_frame_t *frame, xlator_t *this, loc_t *loc,
+                   gf_xattrop_flags_t optype, dict_t *xattr)
+{
+        int  op_errno = 0;
+
+        op_errno = setxattr_scrutiny (frame, loc->inode, xattr);
+
+        if (op_errno != 0)
+                goto red;
+
+
+        STACK_WIND (frame, posix_acl_xattrop_cbk,
+                    FIRST_CHILD(this), FIRST_CHILD(this)->fops->xattrop,
+                    loc, optype, xattr);
+        return 0;
+red:
+        STACK_UNWIND_STRICT (xattrop, frame, -1, op_errno, NULL);
+
+        return 0;
+}
+
+
+
+
+int
+posix_acl_fxattrop_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+                        int op_ret, int op_errno, dict_t *xattr)
+{
+        STACK_UNWIND_STRICT (fxattrop, frame, op_ret, op_errno, xattr);
+
+        return 0;
+}
+
+
+int
+posix_acl_fxattrop (call_frame_t *frame, xlator_t *this, fd_t *fd,
+                    gf_xattrop_flags_t optype, dict_t *xattr)
+{
+        int  op_errno = 0;
+
+        op_errno = setxattr_scrutiny (frame, fd->inode, xattr);
+
+        if (op_errno != 0)
+                goto red;
+
+
+        STACK_WIND (frame, posix_acl_fxattrop_cbk,
+                    FIRST_CHILD(this), FIRST_CHILD(this)->fops->fxattrop,
+                    fd, optype, xattr);
+        return 0;
+red:
+        STACK_UNWIND_STRICT (fxattrop, frame, -1, op_errno, NULL);
+
+        return 0;
+}
+
+
+int
 setxattr_scrutiny (call_frame_t *frame, inode_t *inode, dict_t *xattr)
 {
         struct posix_acl_ctx   *ctx = NULL;
@@ -1773,6 +1842,8 @@ struct xlator_fops fops = {
         .readdir          = posix_acl_readdir,
         .readdirp         = posix_acl_readdirp,
         .setattr          = posix_acl_setattr,
+        .xattrop          = posix_acl_xattrop,
+        .fxattrop         = posix_acl_fxattrop,
         .fsetattr         = posix_acl_fsetattr,
         .setxattr         = posix_acl_setxattr,
         .fsetxattr        = posix_acl_fsetxattr,
