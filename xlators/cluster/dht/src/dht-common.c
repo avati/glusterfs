@@ -145,6 +145,168 @@ out:
 
 
 int
+dht_discover_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+                  int op_ret, int op_errno,
+                  inode_t *inode, struct iatt *stbuf, dict_t *xattr,
+                  struct iatt *postparent)
+{
+        dht_local_t  *local                   = NULL;
+        int           this_call_cnt           = 0;
+        call_frame_t *prev                    = NULL;
+        dht_layout_t *layout                  = NULL;
+        int           ret                     = -1;
+        int           is_dir                  = 0;
+        int           is_linkfile             = 0;
+
+        GF_VALIDATE_OR_GOTO ("dht", frame, out);
+        GF_VALIDATE_OR_GOTO ("dht", this, out);
+        GF_VALIDATE_OR_GOTO ("dht", frame->local, out);
+        GF_VALIDATE_OR_GOTO ("dht", this->private, out);
+        GF_VALIDATE_OR_GOTO ("dht", cookie, out);
+
+        local = frame->local;
+        prev  = cookie;
+
+        layout = local->layout;
+
+        /* Check if the gfid is different for file from other node */
+        if (!op_ret && uuid_compare (local->gfid, stbuf->ia_gfid)) {
+                gf_log (this->name, GF_LOG_WARNING,
+                        "%s: gfid different on %s",
+                        local->loc.path, prev->this->name);
+        }
+
+
+        LOCK (&frame->lock);
+        {
+                /* TODO: assert equal mode on stbuf->st_mode and
+                   local->stbuf->st_mode
+
+                   else mkdir/chmod/chown and fix
+                */
+                ret = dht_layout_merge (this, layout, prev->this,
+                                        op_ret, op_errno, xattr);
+
+                if (op_ret == -1) {
+                        local->op_errno = ENOENT;
+                        gf_log (this->name, GF_LOG_DEBUG,
+                                "lookup of %s on %s returned error (%s)",
+                                local->loc.path, prev->this->name,
+                                strerror (op_errno));
+
+                        goto unlock;
+                }
+
+                is_linkfile = check_is_linkfile (inode, stbuf, xattr);
+                is_dir = check_is_dir (inode, stbuf, xattr);
+
+                if (is_dir) {
+                        local->dir_count ++;
+                } else {
+                        local->file_count ++;
+
+                        if (!is_linkfile) {
+                                /* real file */
+                                local->cached_subvol = prev->this;
+                        } else {
+                                goto unlock;
+                        }
+                }
+
+                local->op_ret = 0;
+
+                if (local->xattr == NULL) {
+                        local->xattr = dict_ref (xattr);
+                } else {
+                        dht_aggregate_xattr (local->xattr, xattr);
+                }
+
+                if (local->inode == NULL)
+                        local->inode = inode_ref (inode);
+
+                dht_iatt_merge (this, &local->stbuf, stbuf, prev->this);
+                dht_iatt_merge (this, &local->postparent, postparent,
+                                prev->this);
+        }
+unlock:
+        UNLOCK (&frame->lock);
+
+
+        this_call_cnt = dht_frame_return (frame);
+
+        if (is_last_call (this_call_cnt)) {
+                if (local->file_count && local->dir_count) {
+                        gf_log (this->name, GF_LOG_ERROR,
+                                "path %s exists as a file on one subvolume "
+                                "and directory on another. "
+                                "Please fix it manually",
+                                local->loc.path);
+                        op_errno = EIO;
+                        goto out;
+                }
+
+                DHT_STACK_UNWIND (lookup, frame, local->op_ret, local->op_errno,
+                                  local->inode, &local->stbuf, local->xattr,
+                                  &local->postparent);
+        }
+
+        return 0;
+out:
+        DHT_STACK_UNWIND (lookup, frame, -1, op_errno, NULL, NULL, NULL, NULL);
+
+        return ret;
+}
+
+
+int
+dht_discover (call_frame_t *frame, xlator_t *this, loc_t *loc)
+{
+        int          ret;
+        dht_local_t *local = NULL;
+        dht_conf_t  *conf = NULL;
+        int          call_cnt = 0;
+        int          op_errno = 0;
+        int          i = 0;
+
+
+        conf = this->private;
+        local = frame->local;
+
+        ret = dict_set_uint32 (local->xattr_req,
+                               "trusted.glusterfs.dht", 4 * 4);
+
+        ret = dict_set_uint32 (local->xattr_req,
+                               "trusted.glusterfs.dht.linkto", 256);
+
+        call_cnt        = conf->subvolume_cnt;
+        local->call_cnt = call_cnt;
+
+        local->layout = dht_layout_new (this, conf->subvolume_cnt);
+
+        if (!local->layout) {
+                op_errno = ENOMEM;
+                goto err;
+        }
+
+        uuid_copy (local->gfid, loc->gfid);
+
+        for (i = 0; i < call_cnt; i++) {
+                STACK_WIND (frame, dht_discover_cbk,
+                            conf->subvolumes[i],
+                            conf->subvolumes[i]->fops->lookup,
+                            &local->loc, local->xattr_req);
+        }
+
+        return 0;
+
+err:
+        DHT_STACK_UNWIND (lookup, frame, -1, ENOMEM, NULL, NULL, NULL, NULL);
+
+        return 0;
+}
+
+
+int
 dht_lookup_dir_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
                     int op_ret, int op_errno,
                     inode_t *inode, struct iatt *stbuf, dict_t *xattr,
@@ -1065,8 +1227,11 @@ dht_lookup (call_frame_t *frame, xlator_t *this,
                 local->xattr_req = dict_new ();
         }
 
+        if (uuid_is_null (loc->pargfid) && !uuid_is_null (loc->gfid)) {
+                dht_discover (frame, this, loc);
+                return 0;
+        }
 
-        cached_subvol = local->cached_subvol;
         if (!hashed_subvol)
                 hashed_subvol = dht_subvol_get_hashed (this, loc);
         local->hashed_subvol = hashed_subvol;

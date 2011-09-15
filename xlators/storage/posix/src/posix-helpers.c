@@ -227,34 +227,9 @@ posix_fill_ino_from_gfid (xlator_t *this, struct iatt *buf)
         buf->ia_ino = temp_ino;
 }
 
-int
-posix_lstat_with_gfid (xlator_t *this, const char *path, struct iatt *stbuf_p)
-{
-        int                    ret     = 0;
-        struct stat            lstatbuf = {0, };
-        struct iatt            stbuf = {0, };
-
-        ret = lstat (path, &lstatbuf);
-        if (ret == -1)
-                goto out;
-
-        iatt_from_stat (&stbuf, &lstatbuf);
-
-        ret = posix_fill_gfid_path (this, path, &stbuf);
-        if (ret)
-                gf_log_callingfn (this->name, GF_LOG_DEBUG, "failed to get gfid");
-
-        posix_fill_ino_from_gfid (this, &stbuf);
-
-        if (stbuf_p)
-                *stbuf_p = stbuf;
-out:
-        return ret;
-}
-
 
 int
-posix_fstat_with_gfid (xlator_t *this, int fd, struct iatt *stbuf_p)
+posix_fdstat (xlator_t *this, int fd, struct iatt *stbuf_p)
 {
         int                    ret     = 0;
         struct stat            fstatbuf = {0, };
@@ -263,6 +238,9 @@ posix_fstat_with_gfid (xlator_t *this, int fd, struct iatt *stbuf_p)
         ret = fstat (fd, &fstatbuf);
         if (ret == -1)
                 goto out;
+
+        if (fstatbuf.st_nlink && !S_ISDIR (fstatbuf.st_mode))
+                fstatbuf.st_nlink--;
 
         iatt_from_stat (&stbuf, &fstatbuf);
 
@@ -275,6 +253,146 @@ posix_fstat_with_gfid (xlator_t *this, int fd, struct iatt *stbuf_p)
         if (stbuf_p)
                 *stbuf_p = stbuf;
 
+out:
+        return ret;
+}
+
+
+int
+posix_istat (xlator_t *this, uuid_t gfid, const char *basename,
+             struct iatt *buf_p)
+{
+        char        *real_path = NULL;
+        struct stat  lstatbuf = {0, };
+        struct iatt  stbuf = {0, };
+        int          ret = 0;
+        struct posix_private *priv = NULL;
+
+
+        priv = this->private;
+
+        MAKE_HANDLE_PATH (real_path, this, gfid, basename);
+
+        ret = lstat (real_path, &lstatbuf);
+
+        if (ret == -1) {
+                if (errno != ENOENT)
+                        gf_log (this->name, GF_LOG_WARNING,
+                                "lstat failed on %s (%s)",
+                                real_path, strerror (errno));
+                goto out;
+        }
+
+        if ((lstatbuf.st_ino == priv->handledir.st_ino) &&
+            (lstatbuf.st_dev == priv->handledir.st_dev)) {
+                errno = ENOENT;
+                return -1;
+        }
+
+        if (!basename) {
+                if (S_ISDIR (lstatbuf.st_mode)) {
+                        gf_log (this->name, GF_LOG_ERROR,
+                                "%s is a directory - BAD BAD",
+                                real_path);
+                        ret = -1;
+                        errno = EISDIR;
+                        goto out;
+                }
+        }
+
+        if (basename) {
+                if (!S_ISDIR (lstatbuf.st_mode))
+                        lstatbuf.st_nlink --;
+                goto process;
+        }
+
+        if ((!S_ISLNK (lstatbuf.st_mode)) ||
+            (lstatbuf.st_nlink > 1)) {
+                lstatbuf.st_nlink --;
+                goto process;
+        }
+
+        /* symlink handle to a directory */
+        ret = stat (real_path, &lstatbuf);
+        if (ret == -1) {
+                if (errno != ELOOP)
+                        gf_log (this->name, GF_LOG_WARNING,
+                                "stat on %s returned %s",
+                                real_path, strerror (errno));
+                goto out;
+        }
+
+process:
+        iatt_from_stat (&stbuf, &lstatbuf);
+
+        if (basename)
+                posix_fill_gfid_path (this, real_path, &stbuf);
+        else
+                uuid_copy (stbuf.ia_gfid, gfid);
+
+        posix_fill_ino_from_gfid (this, &stbuf);
+
+        if (buf_p)
+                *buf_p = stbuf;
+out:
+        return ret;
+}
+
+
+
+int
+posix_pstat (xlator_t *this, uuid_t gfid, const char *path,
+             struct iatt *buf_p)
+{
+        struct stat  lstatbuf = {0, };
+        struct iatt  stbuf = {0, };
+        int          ret = 0;
+        struct posix_private *priv = NULL;
+
+
+        priv = this->private;
+
+        ret = lstat (path, &lstatbuf);
+
+        if (ret == -1) {
+                if (errno != ENOENT)
+                        gf_log (this->name, GF_LOG_WARNING,
+                                "lstat failed on %s (%s)",
+                                path, strerror (errno));
+                goto out;
+        }
+
+        if ((lstatbuf.st_ino == priv->handledir.st_ino) &&
+            (lstatbuf.st_dev == priv->handledir.st_dev)) {
+                errno = ENOENT;
+                return -1;
+        }
+
+        if (S_ISLNK (lstatbuf.st_mode) && lstatbuf.st_nlink == 1) {
+                ret = stat (path, &lstatbuf);
+                if (ret == -1) {
+                        if (errno != ENOENT)
+                                gf_log (this->name, GF_LOG_WARNING,
+                                        "stat failed on %s (%s)",
+                                        path, strerror (errno));
+                        goto out;
+                }
+        }
+
+        if (!S_ISDIR (lstatbuf.st_mode))
+                lstatbuf.st_nlink --;
+
+        iatt_from_stat (&stbuf, &lstatbuf);
+
+        if (gfid && !uuid_is_null (gfid))
+                uuid_copy (stbuf.ia_gfid, gfid);
+        else
+                posix_fill_gfid_path (this, path, &stbuf);
+
+        posix_fill_ino_from_gfid (this, &stbuf);
+
+        if (buf_p)
+                *buf_p = stbuf;
 out:
         return ret;
 }
@@ -311,28 +429,18 @@ out:
  */
 
 int
-setgid_override (xlator_t *this, char *real_path, gid_t *gid)
+setgid_override (xlator_t *this, uuid_t pargfid, gid_t *gid)
 {
-        char *                 tmp_path     = NULL;
-        char *                 parent_path  = NULL;
         struct iatt            parent_stbuf;
 
         int op_ret = 0;
 
-        tmp_path = gf_strdup (real_path);
-        if (!tmp_path) {
-                op_ret = -ENOMEM;
-                goto out;
-        }
-
-        parent_path = dirname (tmp_path);
-
-        op_ret = posix_lstat_with_gfid (this, parent_path, &parent_stbuf);
+        op_ret = posix_istat (this, pargfid, NULL, &parent_stbuf);
         if (op_ret == -1) {
                 op_ret = -errno;
                 gf_log_callingfn (this->name, GF_LOG_ERROR,
                                   "lstat on parent directory (%s) failed: %s",
-                                  parent_path, strerror (errno));
+                                  uuid_utoa (pargfid), strerror (errno));
                 goto out;
         }
 
@@ -345,21 +453,18 @@ setgid_override (xlator_t *this, char *real_path, gid_t *gid)
                 *gid = parent_stbuf.ia_gid;
         }
 out:
-
-        if (tmp_path)
-                GF_FREE (tmp_path);
-
         return op_ret;
 }
 
 
 int
-posix_gfid_set (xlator_t *this, const char *path, dict_t *xattr_req)
+posix_gfid_set (xlator_t *this, const char *path, loc_t *loc, dict_t *xattr_req)
 {
         void        *uuid_req = NULL;
         uuid_t       uuid_curr;
         int          ret = 0;
         struct stat  stat = {0, };
+
 
         if (!xattr_req)
                 goto out;
@@ -370,17 +475,31 @@ posix_gfid_set (xlator_t *this, const char *path, dict_t *xattr_req)
         ret = sys_lgetxattr (path, GFID_XATTR_KEY, uuid_curr, 16);
         if (ret == 16) {
                 ret = 0;
-                goto out;
+                goto verify_handle;
         }
 
         ret = dict_get_ptr (xattr_req, "gfid-req", &uuid_req);
         if (ret) {
-                gf_log_callingfn (this->name, GF_LOG_DEBUG,
-                                  "failed to get the gfid from dict");
+                gf_log (this->name, GF_LOG_DEBUG,
+                        "failed to get the gfid from dict for %s",
+                        loc->path);
                 goto out;
         }
 
         ret = sys_lsetxattr (path, GFID_XATTR_KEY, uuid_req, 16, XATTR_CREATE);
+        if (ret != 0) {
+                gf_log (this->name, GF_LOG_WARNING,
+                        "setting GFID on %s failed (%s)", path,
+                        strerror (errno));
+                goto out;
+        }
+        uuid_copy (uuid_curr, uuid_req);
+
+verify_handle:
+        if (!S_ISDIR (stat.st_mode))
+                ret = posix_handle_hard (this, path, uuid_curr, &stat);
+        else
+                ret = posix_handle_soft (this, path, loc, uuid_curr, &stat);
 
 out:
         return ret;
@@ -388,22 +507,26 @@ out:
 
 
 int
-posix_set_file_contents (xlator_t *this, const char *real_path,
-                         data_pair_t *trav, int flags)
+posix_set_file_contents (xlator_t *this, const char *path, data_pair_t *trav,
+                         int flags)
 {
         char *      key                        = NULL;
-        char        real_filepath[ZR_PATH_MAX] = {0,};
+        char        real_path[PATH_MAX];
         int32_t     file_fd                    = -1;
         int         op_ret                     = 0;
         int         ret                        = -1;
 
+
+        /* XXX: does not handle assigning GFID to created files */
+        return -1;
+
         key = &(trav->key[15]);
-        sprintf (real_filepath, "%s/%s", real_path, key);
+        sprintf (real_path, "%s/%s", path, key);
 
         if (flags & XATTR_REPLACE) {
                 /* if file exists, replace it
                  * else, error out */
-                file_fd = open (real_filepath, O_TRUNC|O_WRONLY);
+                file_fd = open (real_path, O_TRUNC|O_WRONLY);
 
                 if (file_fd == -1) {
                         goto create;
@@ -417,7 +540,7 @@ posix_set_file_contents (xlator_t *this, const char *real_path,
                                 gf_log (this->name, GF_LOG_ERROR,
                                         "write failed while doing setxattr "
                                         "for key %s on path %s: %s",
-                                        key, real_filepath, strerror (errno));
+                                        key, real_path, strerror (errno));
                                 goto out;
                         }
 
@@ -426,14 +549,14 @@ posix_set_file_contents (xlator_t *this, const char *real_path,
                                 op_ret = -errno;
                                 gf_log (this->name, GF_LOG_ERROR,
                                         "close failed on %s: %s",
-                                        real_filepath, strerror (errno));
+                                        real_path, strerror (errno));
                                 goto out;
                         }
                 }
 
         create: /* we know file doesn't exist, create it */
 
-                file_fd = open (real_filepath, O_CREAT|O_WRONLY, 0644);
+                file_fd = open (real_path, O_CREAT|O_WRONLY, 0644);
 
                 if (file_fd == -1) {
                         op_ret = -errno;
@@ -449,7 +572,7 @@ posix_set_file_contents (xlator_t *this, const char *real_path,
                         gf_log (this->name, GF_LOG_ERROR,
                                 "write failed on %s while setxattr with "
                                 "key %s: %s",
-                                real_filepath, key, strerror (errno));
+                                real_path, key, strerror (errno));
                         goto out;
                 }
 
@@ -459,7 +582,7 @@ posix_set_file_contents (xlator_t *this, const char *real_path,
                         gf_log (this->name, GF_LOG_ERROR,
                                 "close failed on %s while setxattr with "
                                 "key %s: %s",
-                                real_filepath, key, strerror (errno));
+                                real_path, key, strerror (errno));
                         goto out;
                 }
         }
@@ -470,33 +593,32 @@ out:
 
 
 int
-posix_get_file_contents (xlator_t *this, const char *real_path,
+posix_get_file_contents (xlator_t *this, uuid_t pargfid,
                          const char *name, char **contents)
 {
-        char        real_filepath[ZR_PATH_MAX] = {0,};
-        char *      key                        = NULL;
+        char        *real_path                 = NULL;
         int32_t     file_fd                    = -1;
         struct iatt stbuf                      = {0,};
         int         op_ret                     = 0;
         int         ret                        = -1;
 
-        key = (char *) &(name[15]);
-        sprintf (real_filepath, "%s/%s", real_path, key);
 
-        op_ret = posix_lstat_with_gfid (this, real_filepath, &stbuf);
+        MAKE_HANDLE_PATH (real_path, this, pargfid, name);
+
+        op_ret = posix_istat (this, pargfid, name, &stbuf);
         if (op_ret == -1) {
                 op_ret = -errno;
                 gf_log (this->name, GF_LOG_ERROR, "lstat failed on %s: %s",
-                        real_filepath, strerror (errno));
+                        real_path, strerror (errno));
                 goto out;
         }
 
-        file_fd = open (real_filepath, O_RDONLY);
+        file_fd = open (real_path, O_RDONLY);
 
         if (file_fd == -1) {
                 op_ret = -errno;
                 gf_log (this->name, GF_LOG_ERROR, "open failed on %s: %s",
-                        real_filepath, strerror (errno));
+                        real_path, strerror (errno));
                 goto out;
         }
 
@@ -511,7 +633,7 @@ posix_get_file_contents (xlator_t *this, const char *real_path,
         if (ret <= 0) {
                 op_ret = -1;
                 gf_log (this->name, GF_LOG_ERROR, "read on %s failed: %s",
-                        real_filepath, strerror (errno));
+                        real_path, strerror (errno));
                 goto out;
         }
 
@@ -522,7 +644,7 @@ posix_get_file_contents (xlator_t *this, const char *real_path,
         if (op_ret == -1) {
                 op_ret = -errno;
                 gf_log (this->name, GF_LOG_ERROR, "close on %s failed: %s",
-                        real_filepath, strerror (errno));
+                        real_path, strerror (errno));
                 goto out;
         }
 
@@ -738,9 +860,6 @@ posix_janitor_thread_proc (void *data)
                                         "janitor: closing dir fd=%p", pfd->dir);
                                 closedir (pfd->dir);
                         }
-
-                        if (pfd->path)
-                                GF_FREE (pfd->path);
 
                         GF_FREE (pfd);
                 }

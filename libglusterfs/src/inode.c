@@ -991,6 +991,7 @@ int
 __inode_path (inode_t *inode, const char *name, char **bufp)
 {
         inode_table_t *table = NULL;
+        inode_t       *itrav = NULL;
         dentry_t      *trav  = NULL;
         size_t         i     = 0, size = 0;
         int64_t        ret   = 0;
@@ -1004,8 +1005,10 @@ __inode_path (inode_t *inode, const char *name, char **bufp)
 
         table = inode->table;
 
-        for (trav = __dentry_search_arbit (inode); trav;
-             trav = __dentry_search_arbit (trav->parent)) {
+        itrav = inode;
+        for (trav = __dentry_search_arbit (itrav); trav;
+             trav = __dentry_search_arbit (itrav)) {
+                itrav = trav->parent;
                 i ++; /* "/" */
                 i += strlen (trav->name);
                 if (i > PATH_MAX) {
@@ -1017,13 +1020,8 @@ __inode_path (inode_t *inode, const char *name, char **bufp)
                 }
         }
 
-        if ((inode->ino != 1) &&
-            (i == 0)) {
-                gf_log (table->name, GF_LOG_WARNING,
-                        "no dentry for non-root inode %"PRId64": %s",
-                        inode->ino, uuid_utoa (inode->gfid));
-                ret = -ENOENT;
-                goto out;
+        if (__is_root_gfid (itrav->gfid) != 0) {
+                i += 43; /* "<gfid:00000000-0000-0000-0000-000000000000>"/path */
         }
 
         if (name) {
@@ -1045,13 +1043,22 @@ __inode_path (inode_t *inode, const char *name, char **bufp)
                         i -= (len + 1);
                 }
 
-                for (trav = __dentry_search_arbit (inode); trav;
-                     trav = __dentry_search_arbit (trav->parent)) {
+                itrav = inode;
+                for (trav = __dentry_search_arbit (itrav); trav;
+                     trav = __dentry_search_arbit (itrav)) {
+                        itrav = trav->parent;
                         len = strlen (trav->name);
                         strncpy (buf + (i - len), trav->name, len);
                         buf[i-len-1] = '/';
                         i -= (len + 1);
                 }
+
+                if (__is_root_gfid (itrav->gfid) != 0) {
+                        snprintf (&buf[i-43], 43, "<gfid:%s>",
+                                  uuid_utoa (itrav->gfid));
+                        buf[i-1] = '>';
+                }
+
                 *bufp = buf;
         } else {
                 ret = -ENOMEM;

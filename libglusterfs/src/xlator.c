@@ -544,6 +544,8 @@ loc_wipe (loc_t *loc)
                 inode_unref (loc->parent);
                 loc->parent = NULL;
         }
+
+        memset (loc, 0, sizeof (*loc));
 }
 
 
