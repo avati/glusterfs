@@ -1251,7 +1251,8 @@ nfs3_lookup_parentdir_resume (void *carg)
         if (!nfs3_fh_is_root_fh (&cs->fh)) {
                 parent = inode_ref (cs->resolvedloc.parent);
                 nfs_loc_wipe (&cs->resolvedloc);
-                ret = nfs_inode_loc_fill (parent, &cs->resolvedloc);
+                ret = nfs_inode_loc_fill (parent, &cs->resolvedloc,
+                                          NFS_RESOLVE_CREATE);
 
                 if (ret < 0)
                         goto errtostat;

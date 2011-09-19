@@ -349,7 +349,7 @@ mnt3svc_mount_inode (rpcsvc_request_t *req, struct mount3_state *ms,
         if ((!req) || (!xl) || (!ms) || (!exportinode))
                 return ret;
 
-        ret = nfs_inode_loc_fill (exportinode, &exportloc);
+        ret = nfs_inode_loc_fill (exportinode, &exportloc, NFS_RESOLVE_EXIST);
         if (ret < 0) {
                 gf_log (GF_MNT, GF_LOG_ERROR, "Loc fill failed for export inode"
                         ": ino %"PRIu64", volume: %s",

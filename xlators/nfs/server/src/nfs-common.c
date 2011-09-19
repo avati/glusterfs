@@ -210,22 +210,25 @@ nfs_loc_fill (loc_t *loc, inode_t *inode, inode_t *parent, char *path)
         if (inode) {
                 loc->inode = inode_ref (inode);
                 loc->ino = inode->ino;
+                uuid_copy (loc->gfid, inode->gfid);
         }
 
         if (parent)
                 loc->parent = inode_ref (parent);
 
-        loc->path = gf_strdup (path);
-        if (!loc->path) {
-                gf_log (GF_NFS, GF_LOG_ERROR, "strdup failed");
-                goto loc_wipe;
-        }
+        if (path) {
+                loc->path = gf_strdup (path);
+                if (!loc->path) {
+                        gf_log (GF_NFS, GF_LOG_ERROR, "strdup failed");
+                        goto loc_wipe;
+                }
 
-        loc->name = strrchr (loc->path, '/');
-        if (loc->name)
-                loc->name++;
-        else
-                goto loc_wipe;
+                loc->name = strrchr (loc->path, '/');
+                if (loc->name)
+                        loc->name++;
+                else
+                        goto loc_wipe;
+        }
 
         ret = 0;
 loc_wipe:
@@ -237,7 +240,7 @@ loc_wipe:
 
 
 int
-nfs_inode_loc_fill (inode_t *inode, loc_t *loc)
+nfs_inode_loc_fill (inode_t *inode, loc_t *loc, int how)
 {
         char            *resolvedpath = NULL;
         inode_t         *parent = NULL;
@@ -250,16 +253,16 @@ nfs_inode_loc_fill (inode_t *inode, loc_t *loc)
                 goto ignore_parent;
 
         parent = inode_parent (inode, 0, NULL);
-        if (!parent)
+        if ((!parent) && (how != NFS_RESOLVE_CREATE))
                 goto err;
 
 ignore_parent:
         ret = inode_path (inode, NULL, &resolvedpath);
-        if (ret < 0)
+        if ((ret < 0) && (how != NFS_RESOLVE_CREATE))
                 goto err;
 
         ret = nfs_loc_fill (loc, inode, parent, resolvedpath);
-        if (ret < 0)
+        if ((ret < 0) && (how != NFS_RESOLVE_CREATE))
                 goto err;
 
 err:
@@ -273,7 +276,7 @@ err:
 }
 
 int
-nfs_gfid_loc_fill (inode_table_t *itable, uuid_t gfid, loc_t *loc)
+nfs_gfid_loc_fill (inode_table_t *itable, uuid_t gfid, loc_t *loc, int how)
 {
         int             ret = -EFAULT;
         inode_t         *inode = NULL;
@@ -283,11 +286,21 @@ nfs_gfid_loc_fill (inode_table_t *itable, uuid_t gfid, loc_t *loc)
 
         inode = inode_find (itable, gfid);
         if (!inode) {
-                ret = -ENOENT;
-                goto err;
+                if (how == NFS_RESOLVE_CREATE) {
+                        inode = inode_new (itable);
+                        if (!inode) {
+                                gf_log (GF_NFS, GF_LOG_ERROR, "Failed to "
+                                        "allocate memory");
+                                ret = -ENOMEM;
+                                goto err;
+                        }
+                } else {
+                        ret = -ENOENT;
+                        goto err;
+                }
         }
 
-        ret = nfs_inode_loc_fill (inode, loc);
+        ret = nfs_inode_loc_fill (inode, loc, how);
 
 err:
         if (inode)
@@ -302,7 +315,7 @@ nfs_root_loc_fill (inode_table_t *itable, loc_t *loc)
         uuid_t  rootgfid = {0, };
 
         rootgfid[15] = 1;
-        return nfs_gfid_loc_fill (itable, rootgfid, loc);
+        return nfs_gfid_loc_fill (itable, rootgfid, loc, NFS_RESOLVE_EXIST);
 }
 
 

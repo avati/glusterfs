@@ -2416,7 +2416,7 @@ nfs3_fh_resolve_inode_done (nfs3_call_state_t *cs, inode_t *inode)
                 return ret;
 
         gf_log (GF_NFS3, GF_LOG_TRACE, "FH inode resolved");
-        ret = nfs_inode_loc_fill (inode, &cs->resolvedloc);
+        ret = nfs_inode_loc_fill (inode, &cs->resolvedloc, NFS_RESOLVE_EXIST);
         if (ret < 0)
                 goto err;
 
@@ -2510,12 +2510,12 @@ err:
 }
 
 
-
+/*
 int32_t
 nfs3_fh_resolve_readdir_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
                              int32_t op_ret, int32_t op_errno,
                              gf_dirent_t *entries);
-
+*/
 int
 nfs3_fh_resolve_found_entry (nfs3_call_state_t *cs, gf_dirent_t *candidate)
 {
@@ -2627,7 +2627,7 @@ nfs3_fh_resolve_found (nfs3_call_state_t *cs, gf_dirent_t *candidate)
         return ret;
 }
 
-
+/*
 int32_t
 nfs3_fh_resolve_opendir_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
                              int32_t op_ret, int32_t op_errno, fd_t *fd)
@@ -2650,6 +2650,7 @@ nfs3_fh_resolve_opendir_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
                         cs->resolvedloc.path);
 
         nfs_user_root_create (&nfu);
+        */
         /* Keep this directory fd_t around till we have either:
          * a. found the entry,
          * b. exhausted all the entries,
@@ -2657,6 +2658,7 @@ nfs3_fh_resolve_opendir_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
          *
          * This decision is made in nfs3_fh_resolve_check_response.
          */
+/*
         cs->resolve_dir_fd = fd;
         gf_log (GF_NFS3, GF_LOG_TRACE, "resolve new fd refed: 0x%lx, ref: %d",
                 (long)cs->resolve_dir_fd, cs->resolve_dir_fd->refcount);
@@ -2666,15 +2668,16 @@ nfs3_fh_resolve_opendir_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
 err:
         return ret;
 }
+*/
 
 int32_t
-nfs3_fh_resolve_dir_lookup_cbk (call_frame_t *frame, void *cookie,
-                                xlator_t *this, int32_t op_ret,int32_t op_errno,
-                                inode_t *inode, struct iatt *buf, dict_t *xattr,
-                                struct iatt *postparent)
+nfs3_fh_resolve_inode_lookup_cbk (call_frame_t *frame, void *cookie,
+                                  xlator_t *this, int32_t op_ret,
+                                  int32_t op_errno, inode_t *inode,
+                                  struct iatt *buf, dict_t *xattr,
+                                  struct iatt *postparent)
 {
         nfs3_call_state_t       *cs = NULL;
-        nfs_user_t              nfu = {0, };
         inode_t                 *linked_inode = NULL;
 
         cs = frame->local;
@@ -2686,11 +2689,8 @@ nfs3_fh_resolve_dir_lookup_cbk (call_frame_t *frame, void *cookie,
                         cs->resolvedloc.path, strerror (op_errno));
                 nfs3_call_resume (cs);
                 goto err;
-        } else
-                gf_log (GF_NFS3, GF_LOG_TRACE, "Dir will be opened: %s",
-                        cs->resolvedloc.path);
+        }
 
-        nfs_user_root_create (&nfu);
         linked_inode = inode_link (inode, cs->resolvedloc.parent,
                                    cs->resolvedloc.name, buf);
         if (linked_inode) {
@@ -2698,9 +2698,13 @@ nfs3_fh_resolve_dir_lookup_cbk (call_frame_t *frame, void *cookie,
                 inode_unref (linked_inode);
         }
 
-        nfs_opendir (cs->nfsx, cs->vol, &nfu, &cs->resolvedloc,
-                     nfs3_fh_resolve_opendir_cbk, cs);
-
+        /* If it is an entry lookup and we landed in the callback for hard 
+         * inode resolution, it means the parent inode was not available and
+         * had to be resolved first. Now that is done, lets head back into
+         * entry resolution.
+         */
+        if (cs->resolventry)
+                nfs3_fh_resolve_entry_hard (cs);
 err:
         return 0;
 }
@@ -2742,7 +2746,7 @@ out:
         return ret;
 }
 
-
+/*
 int
 nfs3_fh_resolve_dir_hard (nfs3_call_state_t *cs, uuid_t dirgfid, char *entry)
 {
@@ -2783,6 +2787,7 @@ out:
         return ret;
 }
 
+*/
 
 /*
  * Called in a recursive code path, so if another
@@ -2821,7 +2826,7 @@ nfs3_fh_resolve_determine_response (nfs3_call_state_t *cs) {
         return response;
 }
 
-
+/*
 int
 nfs3_fh_resolve_check_response (nfs3_call_state_t *cs)
 {
@@ -2916,6 +2921,8 @@ err:
         return 0;
 }
 
+*/
+
 /* Needs no extra argument since it knows that the fh to be resolved is in
  * resolvefh and that it needs to start looking from the root.
  */
@@ -2928,33 +2935,20 @@ nfs3_fh_resolve_inode_hard (nfs3_call_state_t *cs)
         if (!cs)
                 return ret;
 
-        cs->hashidx++;
+        gf_log (GF_NFS3, GF_LOG_TRACE, "FH hard resolution for: gfid 0x%s",
+                uuid_utoa (cs->resolvefh.gfid));
         nfs_loc_wipe (&cs->resolvedloc);
-        if (!nfs3_fh_resolve_validate_dirdepth (cs)) {
-                gf_log (GF_NFS3, GF_LOG_TRACE, "Dir depth validation failed");
-                nfs3_call_resume_estale (cs);
-                ret = 0;
+        ret = nfs_gfid_loc_fill (cs->vol->itable, cs->resolvefh.gfid,
+                                 &cs->resolvedloc, NFS_RESOLVE_CREATE);
+        if (ret < 0) {
+                gf_log (GF_NFS3, GF_LOG_ERROR, "Failed to fill loc using gfid: "
+                        "%s", strerror (-ret));
                 goto out;
         }
 
         nfs_user_root_create (&nfu);
-        gf_log (GF_NFS3, GF_LOG_TRACE, "FH hard resolution for: gfid 0x%s"
-                ", hashcount: %d, current hashidx %d",
-                uuid_utoa (cs->resolvefh.gfid),
-                cs->resolvefh.hashcount, cs->hashidx);
-        ret = nfs_root_loc_fill (cs->vol->itable, &cs->resolvedloc);
-
-        if (ret == 0) {
-                gf_log (GF_NFS3, GF_LOG_TRACE, "Dir will be opened: %s",
-                        cs->resolvedloc.path);
-                ret = nfs_opendir (cs->nfsx, cs->vol, &nfu, &cs->resolvedloc,
-                                   nfs3_fh_resolve_opendir_cbk, cs);
-        } else if (ret == -ENOENT) {
-                gf_log (GF_NFS3, GF_LOG_TRACE, "Dir needs lookup: %s",
-                        cs->resolvedloc.path);
-                ret = nfs_lookup (cs->nfsx, cs->vol, &nfu, &cs->resolvedloc,
-                                  nfs3_fh_resolve_dir_lookup_cbk, cs);
-        }
+        ret = nfs_lookup (cs->nfsx, cs->vol, &nfu, &cs->resolvedloc,
+                          nfs3_fh_resolve_inode_lookup_cbk, cs);
 
 out:
         return ret;
@@ -2973,8 +2967,8 @@ nfs3_fh_resolve_entry_hard (nfs3_call_state_t *cs)
         nfs_loc_wipe (&cs->resolvedloc);
         nfs_user_root_create (&nfu);
         gf_log (GF_NFS3, GF_LOG_TRACE, "FH hard resolution: gfid: %s "
-                ", entry: %s, hashidx: %d", uuid_utoa (cs->resolvefh.gfid),
-                cs->resolventry, cs->hashidx);
+                ", entry: %s", uuid_utoa (cs->resolvefh.gfid),
+                cs->resolventry);
 
         ret = nfs_entry_loc_fill (cs->vol->itable, cs->resolvefh.gfid,
                                   cs->resolventry, &cs->resolvedloc,
