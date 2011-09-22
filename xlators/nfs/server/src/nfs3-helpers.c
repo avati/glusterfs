@@ -2695,7 +2695,8 @@ nfs3_fh_resolve_inode_lookup_cbk (call_frame_t *frame, void *cookie,
                                    cs->resolvedloc.name, buf);
         if (linked_inode) {
                 inode_lookup (linked_inode);
-                inode_unref (linked_inode);
+		inode_unref (cs->resolvedloc.inode);
+		cs->resolvedloc.inode = linked_inode;
         }
 
         /* If it is an entry lookup and we landed in the callback for hard 
@@ -2705,6 +2706,8 @@ nfs3_fh_resolve_inode_lookup_cbk (call_frame_t *frame, void *cookie,
          */
         if (cs->resolventry)
                 nfs3_fh_resolve_entry_hard (cs);
+	else
+		nfs3_call_resume (cs);
 err:
         return 0;
 }
@@ -3104,6 +3107,11 @@ nfs3_fh_resolve_root (nfs3_call_state_t *cs)
         nfs_user_root_create (&nfu);
         gf_log (GF_NFS3, GF_LOG_TRACE, "Root needs lookup");
         ret = nfs_root_loc_fill (cs->vol->itable, &cs->resolvedloc);
+	if (ret < 0) {
+		gf_log (GF_NFS3, GF_LOG_ERROR, "Failed to lookup root from itable: %s",
+			strerror (-ret));
+		goto out;
+	}
 
         ret = nfs_lookup (cs->nfsx, cs->vol, &nfu, &cs->resolvedloc,
                           nfs3_fh_resolve_root_lookup_cbk, cs);

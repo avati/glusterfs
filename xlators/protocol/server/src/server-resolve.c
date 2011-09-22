@@ -445,9 +445,10 @@ server_resolve (call_frame_t *frame)
                 server_resolve_inode (frame);
 
         } else {
-                gf_log (frame->this->name, GF_LOG_WARNING,
-                        "no resolution type for %s (%s)",
-                        resolve->path, gf_fop_list[frame->root->op]);
+                if (resolve == &state->resolve)
+                        gf_log (frame->this->name, GF_LOG_WARNING,
+                                "no resolution type for %s (%s)",
+                                resolve->path, gf_fop_list[frame->root->op]);
 
                 resolve->op_ret = -1;
                 resolve->op_errno = EINVAL;

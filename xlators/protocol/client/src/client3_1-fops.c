@@ -2608,7 +2608,10 @@ client3_1_lookup (call_frame_t *frame, xlator_t *this,
         }
 
         req.path          = (char *)args->loc->path;
-        req.bname         = (char *)args->loc->name;
+	if (args->loc->name)
+	        req.bname         = (char *)args->loc->name;
+	else
+		req.bname = "";
         req.dict.dict_len = dict_len;
 
         ret = client_submit_request (this, &req, frame, conf->fops,

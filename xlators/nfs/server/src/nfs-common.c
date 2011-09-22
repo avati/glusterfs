@@ -208,10 +208,13 @@ nfs_loc_fill (loc_t *loc, inode_t *inode, inode_t *parent, char *path)
                 return ret;
 
         if (inode) {
+		gf_log (GF_NFS, GF_LOG_TRACE, "Getting the inode.");
                 loc->inode = inode_ref (inode);
                 loc->ino = inode->ino;
-                uuid_copy (loc->gfid, inode->gfid);
-        }
+		if (!uuid_is_null (inode->gfid))
+	                uuid_copy (loc->gfid, inode->gfid);
+        } else
+		gf_log (GF_NFS, GF_LOG_TRACE, "No inode got.");
 
         if (parent)
                 loc->parent = inode_ref (parent);
@@ -226,15 +229,14 @@ nfs_loc_fill (loc_t *loc, inode_t *inode, inode_t *parent, char *path)
                 loc->name = strrchr (loc->path, '/');
                 if (loc->name)
                         loc->name++;
-                else
-                        goto loc_wipe;
         }
 
         ret = 0;
 loc_wipe:
-        if (ret < 0)
+        if (ret < 0) {
+		gf_log (GF_NFS, GF_LOG_TRACE, "Wiping loc.");
                 nfs_loc_wipe (loc);
-
+	}
         return ret;
 }
 
@@ -246,25 +248,38 @@ nfs_inode_loc_fill (inode_t *inode, loc_t *loc, int how)
         inode_t         *parent = NULL;
         int             ret = -EFAULT;
 
-        if ((!inode) || (!loc))
+        if ((!inode) || (!loc)) {
+		gf_log (GF_NFS, GF_LOG_ERROR, "problem is here.");
                 return ret;
+	}
 
-        if ((inode) && (inode->ino == 1))
+        if ((inode) && (inode->ino == 1)) {
+		gf_log (GF_NFS, GF_LOG_TRACE, "Inode is root, will ignore parent.");
                 goto ignore_parent;
+	}
 
+/*
         parent = inode_parent (inode, 0, NULL);
-        if ((!parent) && (how != NFS_RESOLVE_CREATE))
+        if ((!parent) && (how != NFS_RESOLVE_CREATE)) {
+                gf_log (GF_NFS, GF_LOG_ERROR, "Parent not present and inode creation was not requested.");
                 goto err;
+        }
+*/
 
 ignore_parent:
         ret = inode_path (inode, NULL, &resolvedpath);
-        if ((ret < 0) && (how != NFS_RESOLVE_CREATE))
+        if ((ret < 0) && (how != NFS_RESOLVE_CREATE)) {
+		gf_log (GF_NFS, GF_LOG_ERROR, "inode_path failed and inode creation was not requested.");
                 goto err;
+	}
 
         ret = nfs_loc_fill (loc, inode, parent, resolvedpath);
-        if ((ret < 0) && (how != NFS_RESOLVE_CREATE))
+        if ((ret < 0) && (how != NFS_RESOLVE_CREATE)) {
+		gf_log (GF_NFS, GF_LOG_ERROR, "Failed to fill loc and inode creation was not requested.");
                 goto err;
+	}
 
+	ret = 0;
 err:
         if (parent)
                 inode_unref (parent);
@@ -286,7 +301,9 @@ nfs_gfid_loc_fill (inode_table_t *itable, uuid_t gfid, loc_t *loc, int how)
 
         inode = inode_find (itable, gfid);
         if (!inode) {
+		gf_log (GF_NFS, GF_LOG_TRACE, "Inode not found in itable, will try to create one.");
                 if (how == NFS_RESOLVE_CREATE) {
+			gf_log (GF_NFS, GF_LOG_TRACE, "Inode needs to be created.");
                         inode = inode_new (itable);
                         if (!inode) {
                                 gf_log (GF_NFS, GF_LOG_ERROR, "Failed to "
@@ -294,13 +311,22 @@ nfs_gfid_loc_fill (inode_table_t *itable, uuid_t gfid, loc_t *loc, int how)
                                 ret = -ENOMEM;
                                 goto err;
                         }
+
+			uuid_copy (loc->gfid, gfid);
                 } else {
+			gf_log (GF_NFS, GF_LOG_ERROR, "Inode not found in itable and no creation was requested.");
                         ret = -ENOENT;
                         goto err;
                 }
-        }
+        } else {
+		gf_log (GF_NFS, GF_LOG_TRACE, "Inode was found in the itable.");
+	}
 
         ret = nfs_inode_loc_fill (inode, loc, how);
+	if (ret < 0) {
+		gf_log (GF_NFS, GF_LOG_ERROR, "Inode loc filling failed.: %s", strerror (-ret));
+		goto err;
+	}
 
 err:
         if (inode)
