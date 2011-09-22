@@ -1252,6 +1252,7 @@ dht_lookup (call_frame_t *frame, xlator_t *this,
         }
 
         if (uuid_is_null (loc->pargfid) && !uuid_is_null (loc->gfid) && __is_root_gfid (loc->inode->gfid) != 0) {
+                local->cached_subvol = NULL;
                 dht_discover (frame, this, loc);
                 return 0;
         }
