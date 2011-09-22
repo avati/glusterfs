@@ -276,7 +276,7 @@ posix_istat (xlator_t *this, uuid_t gfid, const char *basename,
         ret = lstat (real_path, &lstatbuf);
 
         if (ret == -1) {
-                if (errno != ENOENT)
+                if (errno != ENOENT && errno != ELOOP)
                         gf_log (this->name, GF_LOG_WARNING,
                                 "lstat failed on %s (%s)",
                                 real_path, strerror (errno));
@@ -289,40 +289,9 @@ posix_istat (xlator_t *this, uuid_t gfid, const char *basename,
                 return -1;
         }
 
-        if (!basename) {
-                if (S_ISDIR (lstatbuf.st_mode)) {
-                        gf_log (this->name, GF_LOG_ERROR,
-                                "%s is a directory - BAD BAD",
-                                real_path);
-                        ret = -1;
-                        errno = EISDIR;
-                        goto out;
-                }
-        }
-
-        if (basename) {
-                if (!S_ISDIR (lstatbuf.st_mode))
-                        lstatbuf.st_nlink --;
-                goto process;
-        }
-
-        if ((!S_ISLNK (lstatbuf.st_mode)) ||
-            (lstatbuf.st_nlink > 1)) {
+        if (!S_ISDIR (lstatbuf.st_mode))
                 lstatbuf.st_nlink --;
-                goto process;
-        }
 
-        /* symlink handle to a directory */
-        ret = stat (real_path, &lstatbuf);
-        if (ret == -1) {
-                if (errno != ELOOP)
-                        gf_log (this->name, GF_LOG_WARNING,
-                                "stat on %s returned %s",
-                                real_path, strerror (errno));
-                goto out;
-        }
-
-process:
         iatt_from_stat (&stbuf, &lstatbuf);
 
         if (basename)
@@ -366,17 +335,6 @@ posix_pstat (xlator_t *this, uuid_t gfid, const char *path,
             (lstatbuf.st_dev == priv->handledir.st_dev)) {
                 errno = ENOENT;
                 return -1;
-        }
-
-        if (S_ISLNK (lstatbuf.st_mode) && lstatbuf.st_nlink == 1) {
-                ret = stat (path, &lstatbuf);
-                if (ret == -1) {
-                        if (errno != ENOENT)
-                                gf_log (this->name, GF_LOG_WARNING,
-                                        "stat failed on %s (%s)",
-                                        path, strerror (errno));
-                        goto out;
-                }
         }
 
         if (!S_ISDIR (lstatbuf.st_mode))

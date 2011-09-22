@@ -82,6 +82,9 @@ posix_handle_path (xlator_t *this, uuid_t gfid, const char *basename, char *buf,
         struct posix_private *priv = NULL;
         char                 *uuid_str = NULL;
         int                   len = 0;
+        char                  linkname[300] = {0,}; /* "../../<gfid>/<NAME_MAX>" */
+        int                   ret = 0;
+        struct stat           stat;
 
         priv = this->private;
 
@@ -96,6 +99,8 @@ posix_handle_path (xlator_t *this, uuid_t gfid, const char *basename, char *buf,
 
         if (basename) {
                 len += (strlen (basename) + 1);
+        } else {
+                len += 256;  /* worst-case for directory's symlink-handle expansion */
         }
 
         if (buflen < len || !buf)
@@ -109,8 +114,25 @@ posix_handle_path (xlator_t *this, uuid_t gfid, const char *basename, char *buf,
         } else {
                 len = snprintf (buf, buflen, "%s/%s/%02x/%02x/%s", priv->base_path,
                                 HANDLE_PFX, gfid[0], gfid[1], uuid_str);
-        }
 
+                ret = lstat (buf, &stat);
+
+                if (ret == 0 && S_ISLNK(stat.st_mode) && stat.st_nlink == 1) {
+                        /* is a directory's symlink-handle */
+                        ret = readlink (buf, linkname, buflen);
+                        if (ret < 0 || ret > buflen)
+                                goto out;
+                        linkname[ret] = 0;
+
+                        if (memcmp (linkname, "../../", 6) != 0)
+                                goto out;
+
+                        strncpy (buf + priv->base_path_length + 1 + strlen (HANDLE_PFX) + 1,
+                                 linkname + 6,
+                                 buflen - (priv->base_path_length + 1 + strlen (HANDLE_PFX) + 1));
+                }
+        }
+out:
         return len;
 }
 
