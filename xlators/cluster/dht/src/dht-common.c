@@ -245,6 +245,30 @@ unlock:
                         goto out;
                 }
 
+                if (local->cached_subvol) {
+                        ret = dht_layout_preset (this, local->cached_subvol,
+                                                 local->inode);
+                        if (ret < 0) {
+                                gf_log (this->name, GF_LOG_WARNING,
+                                        "failed to set layout for subvolume %s",
+                                        local->cached_subvol ? local->cached_subvol->name : "<nil>");
+                                op_errno = EINVAL;
+                                goto out;
+                        }
+                } else {
+                        ret = dht_layout_normalize (this, &local->loc, layout);
+
+                        if (ret != 0) {
+                                gf_log (this->name, GF_LOG_DEBUG,
+                                        "normalizing failed on %s",
+                                        local->loc.path);
+                                op_errno = EINVAL;
+                                goto out;
+                        }
+
+                        dht_layout_set (this, local->inode, layout);
+
+                }
                 DHT_STACK_UNWIND (lookup, frame, local->op_ret, local->op_errno,
                                   local->inode, &local->stbuf, local->xattr,
                                   &local->postparent);
@@ -1227,7 +1251,7 @@ dht_lookup (call_frame_t *frame, xlator_t *this,
                 local->xattr_req = dict_new ();
         }
 
-        if (uuid_is_null (loc->pargfid) && !uuid_is_null (loc->gfid)) {
+        if (uuid_is_null (loc->pargfid) && !uuid_is_null (loc->gfid) && __is_root_gfid (loc->inode->gfid) != 0) {
                 dht_discover (frame, this, loc);
                 return 0;
         }
