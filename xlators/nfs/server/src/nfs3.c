@@ -655,7 +655,7 @@ nfs3svc_getattr_lookup_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
         if (op_ret == -1)
                 status = nfs3_errno_to_nfsstat3 (op_errno);
 
-        nfs3_log_common_res (rpcsvc_request_xid (cs->req), "GETATTR",
+        nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_GETATTR,
                              status, op_errno);
 
         nfs3_getattr_reply (cs->req, status, buf);
@@ -677,7 +677,7 @@ nfs3svc_getattr_stat_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
         if (op_ret == -1)
                 status = nfs3_errno_to_nfsstat3 (op_errno);
 
-        nfs3_log_common_res (rpcsvc_request_xid (cs->req), "GETATTR",
+        nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_GETATTR,
                              status, op_errno);
 
         nfs3_getattr_reply (cs->req, status, buf);
@@ -723,7 +723,7 @@ nfs3_getattr_resume (void *carg)
 nfs3err:
         if (ret < 0) {
                 nfs3_log_common_res (rpcsvc_request_xid (cs->req),
-                                     "GETATTR", stat, -ret);
+                                     NFS3_GETATTR, stat, -ret);
                 nfs3_getattr_reply (cs->req, stat, NULL);
                 nfs3_call_state_wipe (cs);
                 ret = 0;
@@ -758,7 +758,7 @@ nfs3_getattr (rpcsvc_request_t *req, struct nfs3_fh *fh)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (req), "GETATTR",
+                nfs3_log_common_res (rpcsvc_request_xid (req), NFS3_GETATTR,
                                      stat, -ret);
                 nfs3_getattr_reply (req, stat, NULL);
                 ret = 0;
@@ -839,7 +839,7 @@ nfs3svc_truncate_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
 
         stat = NFS3_OK;
 nfs3err:
-        nfs3_log_common_res (rpcsvc_request_xid (cs->req), "SETATTR", stat,
+        nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_SETATTR, stat,
                              op_errno);
         nfs3_setattr_reply (cs->req, stat, prestat, postbuf);
         nfs3_call_state_wipe (cs);
@@ -897,7 +897,7 @@ nfs3svc_setattr_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
 nfs3err:
         if (ret < 0) {
                 nfs3_log_common_res (rpcsvc_request_xid (cs->req),
-                                     "SETATTR", stat, op_errno);
+                                     NFS3_SETATTR, stat, op_errno);
                 nfs3_setattr_reply (cs->req, stat, prebuf, postop);
                 nfs3_call_state_wipe (cs);
         }
@@ -940,7 +940,7 @@ nfs3svc_setattr_stat_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
 nfs3err:
         if (ret < 0) {
                 nfs3_log_common_res (rpcsvc_request_xid (cs->req),
-                                     "SETATTR", stat, op_errno);
+                                     NFS3_SETATTR, stat, op_errno);
                 nfs3_setattr_reply (cs->req, stat, NULL, NULL);
                 nfs3_call_state_wipe (cs);
         }
@@ -978,7 +978,7 @@ nfs3_setattr_resume (void *carg)
 nfs3err:
         if (ret < 0) {
                 nfs3_log_common_res (rpcsvc_request_xid (cs->req),
-                                     "SETATTR", stat, -ret);
+                                     NFS3_SETATTR, stat, -ret);
                 nfs3_setattr_reply (cs->req, stat, NULL, NULL);
                 nfs3_call_state_wipe (cs);
         }
@@ -1033,7 +1033,7 @@ nfs3_setattr (rpcsvc_request_t *req, struct nfs3_fh *fh, sattr3 *sattr,
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (req), "SETATTR",
+                nfs3_log_common_res (rpcsvc_request_xid (req), NFS3_SETATTR,
                                      stat, -ret);
                 nfs3_setattr_reply (req, stat, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -1150,7 +1150,7 @@ xmit_res:
                 goto out;
         }
 
-        nfs3_log_newfh_res (rpcsvc_request_xid (cs->req), "LOOKUP", status,
+        nfs3_log_newfh_res (rpcsvc_request_xid (cs->req), NFS3_LOOKUP, status,
                             op_errno, &newfh);
         nfs3_lookup_reply (cs->req, status, &newfh, buf, postparent);
         nfs3_call_state_wipe (cs);
@@ -1200,7 +1200,7 @@ nfs3svc_lookup_parentdir_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
         }
 
 xmit_res:
-        nfs3_log_newfh_res (rpcsvc_request_xid (cs->req), "LOOKUP", status,
+        nfs3_log_newfh_res (rpcsvc_request_xid (cs->req), NFS3_LOOKUP, status,
                             op_errno, &newfh);
         nfs3_lookup_reply (cs->req, status, &newfh, buf, postparent);
         nfs3_call_state_wipe (cs);
@@ -1266,7 +1266,7 @@ errtostat:
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "LOOKUP",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_LOOKUP,
                                      stat, -ret);
                 nfs3_lookup_reply (cs->req, stat, NULL, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -1301,7 +1301,7 @@ nfs3_lookup_resume (void *carg)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "LOOKUP",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_LOOKUP,
                                      stat, -ret);
                 nfs3_lookup_reply (cs->req, stat, NULL, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -1350,7 +1350,7 @@ nfs3_lookup (rpcsvc_request_t *req, struct nfs3_fh *fh, int fhlen, char *name)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (req), "LOOKUP",
+                nfs3_log_common_res (rpcsvc_request_xid (req), NFS3_LOOKUP,
                                      stat,
                                      -ret);
                 nfs3_lookup_reply (req, stat, NULL, NULL, NULL);
@@ -1419,7 +1419,7 @@ nfs3svc_access_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
         if (op_ret == -1)
                 status = nfs3_errno_to_nfsstat3 (op_errno);
 
-        nfs3_log_common_res (rpcsvc_request_xid (cs->req), "ACCESS", status,
+        nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_ACCESS, status,
                              op_errno);
         nfs3_access_reply (cs->req, status, op_errno);
         nfs3_call_state_wipe (cs);
@@ -1449,7 +1449,7 @@ nfs3_access_resume (void *carg)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "ACCESS",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_ACCESS,
                                      stat, -ret);
                 nfs3_access_reply (cs->req, stat, 0);
                 nfs3_call_state_wipe (cs);
@@ -1486,7 +1486,7 @@ nfs3_access (rpcsvc_request_t *req, struct nfs3_fh *fh, uint32_t accbits)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (req), "ACCESS",
+                nfs3_log_common_res (rpcsvc_request_xid (req), NFS3_ACCESS,
                                      stat, -ret);
                 nfs3_access_reply (req, stat, 0);
                 nfs3_call_state_wipe (cs);
@@ -1590,7 +1590,7 @@ nfs3_readlink_resume (void *carg)
 nfs3err:
         if (ret < 0) {
                 nfs3_log_common_res (rpcsvc_request_xid (cs->req),
-                                     "READLINK", stat, -ret);
+                                     NFS3_READLINK, stat, -ret);
                 nfs3_readlink_reply (cs->req, stat, NULL, NULL);
                 nfs3_call_state_wipe (cs);
         }
@@ -1626,7 +1626,7 @@ nfs3_readlink (rpcsvc_request_t *req, struct nfs3_fh *fh)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (req), "READLINK",
+                nfs3_log_common_res (rpcsvc_request_xid (req), NFS3_READLINK,
                                      stat, -ret);
                 nfs3_readlink_reply (req, stat, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -1754,7 +1754,7 @@ nfs3_read_fd_resume (void *carg)
                 stat = nfs3_errno_to_nfsstat3 (-ret);
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "READ",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_READ,
                                      stat, -ret);
                 nfs3_read_reply (cs->req, stat, 0, NULL, 0, NULL, NULL, 0);
                 nfs3_call_state_wipe (cs);
@@ -1782,7 +1782,7 @@ nfs3_read_resume (void *carg)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "READ",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_READ,
                                      stat, -ret);
                 nfs3_read_reply (cs->req, stat, 0, NULL,0, NULL, NULL, 0);
                 nfs3_call_state_wipe (cs);
@@ -1822,7 +1822,7 @@ nfs3_read (rpcsvc_request_t *req, struct nfs3_fh *fh, offset3 offset,
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (req), "READ", stat,
+                nfs3_log_common_res (rpcsvc_request_xid (req), NFS3_READ, stat,
                                      -ret);
                 nfs3_read_reply (req, stat, 0, NULL,0, NULL, NULL, 0);
                 nfs3_call_state_wipe (cs);
@@ -2077,7 +2077,7 @@ nfs3_write_resume (void *carg)
                 stat = nfs3_errno_to_nfsstat3 (-ret);
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "WRITE",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_WRITE,
                                      stat, -ret);
                 nfs3_write_reply (cs->req, stat, 0, cs->writetype, 0, NULL,
                                   NULL);
@@ -2104,7 +2104,7 @@ nfs3_write_open_resume (void *carg)
                 stat = nfs3_errno_to_nfsstat3 (-ret);
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "WRITE",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_WRITE,
                                      stat, -ret);
                 nfs3_write_reply (cs->req, stat, 0, cs->writetype, 0, NULL,
                                   NULL);
@@ -2152,7 +2152,7 @@ nfs3_write (rpcsvc_request_t *req, struct nfs3_fh *fh, offset3 offset,
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (req), "WRITE",
+                nfs3_log_common_res (rpcsvc_request_xid (req), NFS3_WRITE,
                                      stat, -ret);
                 nfs3_write_reply (req, stat, 0, stable, 0, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -2271,7 +2271,7 @@ nfs3svc_create_setattr_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
 
         stat = NFS3_OK;
 nfs3err:
-        nfs3_log_newfh_res (rpcsvc_request_xid (cs->req), "CREATE", stat,
+        nfs3_log_newfh_res (rpcsvc_request_xid (cs->req), NFS3_CREATE, stat,
                             op_errno, &cs->fh);
         nfs3_create_reply (cs->req, stat, &cs->fh, postop, &cs->preparent,
                            &cs->postparent);
@@ -2317,7 +2317,7 @@ nfs3svc_create_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_newfh_res (rpcsvc_request_xid (cs->req), "CREATE",
+                nfs3_log_newfh_res (rpcsvc_request_xid (cs->req), NFS3_CREATE,
                                     stat, op_errno, &cs->fh);
                 nfs3_create_reply (cs->req, stat, &cs->fh, buf, preparent,
                                    postparent);
@@ -2395,7 +2395,7 @@ nfs3svc_create_stat_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "CREATE",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_CREATE,
                                      stat, op_errno);
                 nfs3_create_reply (cs->req, stat, &cs->fh, buf, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -2474,7 +2474,7 @@ nfs3_create_resume (void *carg)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "CREATE",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_CREATE,
                                      stat, -ret);
                 nfs3_create_reply (cs->req, stat, NULL, NULL, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -2521,7 +2521,7 @@ nfs3_create (rpcsvc_request_t *req, struct nfs3_fh *dirfh, char *name,
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (req), "CREATE",
+                nfs3_log_common_res (rpcsvc_request_xid (req), NFS3_CREATE,
                                      stat, -ret);
                 nfs3_create_reply (req, stat, NULL, NULL, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -2606,7 +2606,7 @@ nfs3svc_mkdir_setattr_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
 
         stat = NFS3_OK;
 nfs3err:
-        nfs3_log_newfh_res (rpcsvc_request_xid (cs->req), "MKDIR", stat,
+        nfs3_log_newfh_res (rpcsvc_request_xid (cs->req), NFS3_MKDIR, stat,
                             op_errno, &cs->fh);
         nfs3_mkdir_reply (cs->req, stat, &cs->fh, postop, &cs->preparent,
                           &cs->postparent);
@@ -2651,7 +2651,7 @@ nfs3svc_mkdir_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_newfh_res (rpcsvc_request_xid (cs->req), "MKDIR",
+                nfs3_log_newfh_res (rpcsvc_request_xid (cs->req), NFS3_MKDIR,
                                     stat, op_errno, &cs->fh);
                 nfs3_mkdir_reply (cs->req, stat, &cs->fh, buf, preparent,
                                   postparent);
@@ -2690,7 +2690,7 @@ nfs3_mkdir_resume (void *carg)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "MKDIR",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_MKDIR,
                                      stat, -ret);
                 nfs3_mkdir_reply (cs->req, stat, NULL, NULL, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -2735,7 +2735,7 @@ nfs3_mkdir (rpcsvc_request_t *req, struct nfs3_fh *dirfh, char *name,
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (req), "MKDIR",
+                nfs3_log_common_res (rpcsvc_request_xid (req), NFS3_MKDIR,
                                      stat, -ret);
                 nfs3_mkdir_reply (req, stat, NULL, NULL, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -2812,7 +2812,7 @@ nfs3svc_symlink_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
         stat = NFS3_OK;
 
 nfs3err:
-        nfs3_log_newfh_res (rpcsvc_request_xid (cs->req), "SYMLINK", stat,
+        nfs3_log_newfh_res (rpcsvc_request_xid (cs->req), NFS3_SYMLINK, stat,
                             op_errno, &cs->fh);
         nfs3_symlink_reply (cs->req, stat, &cs->fh, buf, preparent,
                             postparent);
@@ -2843,7 +2843,7 @@ nfs3_symlink_resume (void *carg)
 nfs3err:
         if (ret < 0) {
                 nfs3_log_common_res (rpcsvc_request_xid (cs->req),
-                                     "SYMLINK", stat, -ret);
+                                     NFS3_SYMLINK, stat, -ret);
                 nfs3_symlink_reply (cs->req, stat, NULL, NULL, NULL, NULL);
                 nfs3_call_state_wipe (cs);
         }
@@ -2891,7 +2891,7 @@ nfs3_symlink (rpcsvc_request_t *req, struct nfs3_fh *dirfh, char *name,
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (req), "SYMLINK",
+                nfs3_log_common_res (rpcsvc_request_xid (req), NFS3_SYMLINK,
                                      stat, -ret);
                 nfs3_symlink_reply (req, stat, NULL, NULL, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -2969,7 +2969,7 @@ nfs3svc_mknod_setattr_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
 
         stat = NFS3_OK;
 nfs3err:
-        nfs3_log_newfh_res (rpcsvc_request_xid (cs->req), "MKNOD", stat,
+        nfs3_log_newfh_res (rpcsvc_request_xid (cs->req), NFS3_MKNOD, stat,
                             op_errno, &cs->fh);
         nfs3_mknod_reply (cs->req, stat, &cs->fh, postop, &cs->preparent,
                           &cs->postparent);
@@ -3014,7 +3014,7 @@ nfs3svc_mknod_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
                 stat = nfs3_errno_to_nfsstat3 (-ret);
 nfs3err:
         if (ret < 0) {
-                nfs3_log_newfh_res (rpcsvc_request_xid (cs->req), "MKNOD",
+                nfs3_log_newfh_res (rpcsvc_request_xid (cs->req), NFS3_MKNOD,
                                     stat,
                                     op_errno, &cs->fh);
                 nfs3_mknod_reply (cs->req, stat, &cs->fh, buf, preparent,
@@ -3113,7 +3113,7 @@ nfs3_mknod_resume (void *carg)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "MKNOD",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_MKNOD,
                                      stat, -ret);
                 nfs3_mknod_reply (cs->req, stat, NULL, NULL, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -3179,7 +3179,7 @@ nfs3_mknod (rpcsvc_request_t *req, struct nfs3_fh *fh, char *name,
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (req), "MKNOD",
+                nfs3_log_common_res (rpcsvc_request_xid (req), NFS3_MKNOD,
                                      stat, -ret);
                 nfs3_mknod_reply (req, stat, NULL, NULL, NULL, NULL);
                 /* Ret must be 0 after this so that the caller does not
@@ -3264,7 +3264,7 @@ nfs3svc_remove_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
          }
 
 do_not_unref_cached_fd:
-        nfs3_log_common_res (rpcsvc_request_xid (cs->req), "REMOVE", stat,
+        nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_REMOVE, stat,
                              op_errno);
         nfs3_remove_reply (cs->req, stat, preparent, postparent);
         nfs3_call_state_wipe (cs);
@@ -3313,7 +3313,7 @@ nfs3_remove_resume (void *carg)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "REMOVE",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_REMOVE,
                                      stat, -ret);
                 nfs3_remove_reply (cs->req, stat, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -3353,7 +3353,7 @@ nfs3_remove (rpcsvc_request_t *req, struct nfs3_fh *fh, char *name)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (req), "REMOVE",
+                nfs3_log_common_res (rpcsvc_request_xid (req), NFS3_REMOVE,
                                      stat, -ret);
                 nfs3_remove_reply (req, stat, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -3426,7 +3426,7 @@ nfs3svc_rmdir_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
                 stat = NFS3_OK;
         }
 
-        nfs3_log_common_res (rpcsvc_request_xid (cs->req), "RMDIR", stat,
+        nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_RMDIR, stat,
                              op_errno);
         nfs3_rmdir_reply (cs->req, stat, preparent, postparent);
         nfs3_call_state_wipe (cs);
@@ -3455,7 +3455,7 @@ nfs3_rmdir_resume (void *carg)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "RMDIR",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_RMDIR,
                                      stat, -ret);
                 nfs3_rmdir_reply (cs->req, stat, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -3496,7 +3496,7 @@ nfs3_rmdir (rpcsvc_request_t *req, struct nfs3_fh *fh, char *name)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (req), "RMDIR",
+                nfs3_log_common_res (rpcsvc_request_xid (req), NFS3_RMDIR,
                                      stat, -ret);
                 nfs3_rmdir_reply (req, stat, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -3590,7 +3590,7 @@ nfs3svc_rename_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
         }
 
 nfs3err:
-        nfs3_log_common_res (rpcsvc_request_xid (cs->req), "RENAME", stat,
+        nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_RENAME, stat,
                              -ret);
         nfs3_rename_reply (cs->req, stat, buf, preoldparent, postoldparent,
                            prenewparent, postnewparent);
@@ -3621,7 +3621,7 @@ nfs3_rename_resume_dst (void *carg)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "RENAME",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_RENAME,
                                      stat, -ret);
                 nfs3_rename_reply (cs->req, stat, NULL, NULL, NULL, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -3657,7 +3657,7 @@ nfs3_rename_resume_src (void *carg)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "RENAME",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_RENAME,
                                      stat, -ret);
                 nfs3_rename_reply (cs->req, stat, NULL, NULL, NULL, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -3712,7 +3712,7 @@ nfs3_rename (rpcsvc_request_t *req, struct nfs3_fh *olddirfh, char *oldname,
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (req), "RENAME",
+                nfs3_log_common_res (rpcsvc_request_xid (req), NFS3_RENAME,
                                      stat, -ret);
                 nfs3_rename_reply (req, stat, NULL, NULL, NULL, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -3788,7 +3788,7 @@ nfs3svc_link_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
         else
                 stat = NFS3_OK;
 
-        nfs3_log_common_res (rpcsvc_request_xid (cs->req), "LINK", stat,
+        nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_LINK, stat,
                              op_errno);
         nfs3_link_reply (cs->req, stat, buf, preparent, postparent);
         nfs3_call_state_wipe (cs);
@@ -3819,7 +3819,7 @@ nfs3_link_resume_lnk (void *carg)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "LINK",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_LINK,
                                      stat, -ret);
                 nfs3_link_reply (cs->req, stat, NULL, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -3850,7 +3850,7 @@ nfs3_link_resume_tgt (void *carg)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "LINK",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_LINK,
                                      stat, -ret);
                 nfs3_link_reply (cs->req, stat, NULL, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -3899,7 +3899,7 @@ nfs3_link (rpcsvc_request_t *req, struct nfs3_fh *targetfh,
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (req), "LINK", stat,
+                nfs3_log_common_res (rpcsvc_request_xid (req), NFS3_LINK, stat,
                                      -ret);
                 nfs3_link_reply (req, stat, NULL, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -4062,11 +4062,11 @@ err:
 
         if (cs->maxcount == 0) {
                 nfs3_log_common_res (rpcsvc_request_xid (cs->req),
-                                     "READDIR", stat, op_errno);
+                                     NFS3_READDIR, stat, op_errno);
                 nfs3_readdir_reply (cs->req, stat, NULL, 0, NULL, NULL, 0, 0);
         } else {
                 nfs3_log_common_res (rpcsvc_request_xid (cs->req),
-                                     "READDIRP", stat, op_errno);
+                                     NFS3_READDIRP, stat, op_errno);
                 nfs3_readdirp_reply (cs->req, stat, NULL, 0, NULL, NULL,
                                      0, 0, 0);
         }
@@ -4122,12 +4122,12 @@ nfs3err:
         if (ret < 0) {
                 if (cs->maxcount == 0) {
                         nfs3_log_common_res (rpcsvc_request_xid (cs->req),
-                                             "READDIR", stat, -ret);
+                                             NFS3_READDIR, stat, -ret);
                         nfs3_readdir_reply (cs->req, stat, NULL, 0, NULL, NULL,
                                             0, 0);
                 } else {
                         nfs3_log_common_res (rpcsvc_request_xid (cs->req),
-                                             "READDIRP", stat, -ret);
+                                             NFS3_READDIRP, stat, -ret);
                         nfs3_readdirp_reply (cs->req, stat, NULL, 0, NULL, NULL,
                                              0, 0, 0);
                 }
@@ -4158,12 +4158,12 @@ nfs3err:
         if (ret < 0) {
                 if (cs->maxcount == 0) {
                         nfs3_log_common_res (rpcsvc_request_xid (cs->req),
-                                             "READDIR", stat, -ret);
+                                             NFS3_READDIR, stat, -ret);
                         nfs3_readdir_reply (cs->req, stat, NULL, 0, NULL, NULL,
                                             0, 0);
                 } else {
                         nfs3_log_common_res (rpcsvc_request_xid (cs->req),
-                                             "READDIRP", stat, -ret);
+                                             NFS3_READDIRP, stat, -ret);
                         nfs3_readdirp_reply (cs->req, stat, NULL, 0, NULL, NULL,
                                              0, 0, 0);
                 }
@@ -4212,12 +4212,12 @@ nfs3err:
         if (ret < 0) {
                 if (maxcount == 0) {
                         nfs3_log_common_res (rpcsvc_request_xid (req),
-                                             "READDIR", stat, -ret);
+                                             NFS3_READDIR, stat, -ret);
                         nfs3_readdir_reply (req, stat, NULL, 0, NULL, NULL, 0,
                                             0);
                 } else {
                         nfs3_log_common_res (rpcsvc_request_xid (req),
-                                             "READDIRP", stat, -ret);
+                                             NFS3_READDIRP, stat, -ret);
                         nfs3_readdirp_reply (req, stat, NULL, 0, NULL, NULL, 0,
                                              0, 0);
                 }
@@ -4341,7 +4341,7 @@ nfs3_fsstat_stat_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
         else
                 stat = NFS3_OK;
 
-        nfs3_log_common_res (rpcsvc_request_xid (cs->req), "FSTAT", stat,
+        nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_FSSTAT, stat,
                              op_errno);
         nfs3_fsstat_reply (cs->req, stat, &cs->fsstat, buf);
         nfs3_call_state_wipe (cs);
@@ -4377,7 +4377,7 @@ nfs3_fsstat_statfs_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
 
 err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "FSTAT",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_FSSTAT,
                                      stat, -ret);
                 nfs3_fsstat_reply (cs->req, stat, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -4409,7 +4409,7 @@ nfs3_fsstat_resume (void *carg)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "FSTAT",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_FSSTAT,
                                      stat, -ret);
                 nfs3_fsstat_reply (cs->req, stat, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -4447,7 +4447,7 @@ nfs3_fsstat (rpcsvc_request_t *req, struct nfs3_fh *fh)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (req), "FSTAT",
+                nfs3_log_common_res (rpcsvc_request_xid (req), NFS3_FSSTAT,
                                      stat, -ret);
                 nfs3_fsstat_reply (req, stat, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -4520,7 +4520,7 @@ nfs3svc_fsinfo_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
         else
                 status = NFS3_OK;
 
-        nfs3_log_common_res (rpcsvc_request_xid (cs->req), "FSINFO", status,
+        nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_FSINFO, status,
                              op_errno);
 
         nfs3_fsinfo_reply (cs->req, status, buf);
@@ -4553,7 +4553,7 @@ nfs3_fsinfo_resume (void *carg)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "FSINFO",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_FSINFO,
                                      stat, -ret);
                 nfs3_fsinfo_reply (cs->req, stat, NULL);
                 nfs3_call_state_wipe (cs);
@@ -4590,7 +4590,7 @@ nfs3_fsinfo (rpcsvc_request_t *req, struct nfs3_fh *fh)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (req), "FSINFO",
+                nfs3_log_common_res (rpcsvc_request_xid (req), NFS3_FSINFO,
                                      stat, -ret);
                 nfs3_fsinfo_reply (req, stat, NULL);
                 nfs3_call_state_wipe (cs);
@@ -4663,7 +4663,7 @@ nfs3svc_pathconf_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
                 stat = NFS3_OK;
         }
 
-        nfs3_log_common_res (rpcsvc_request_xid (cs->req), "PATHCONF", stat,
+        nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_PATHCONF, stat,
                              op_errno);
         nfs3_pathconf_reply (cs->req, stat, sbuf);
         nfs3_call_state_wipe (cs);
@@ -4693,7 +4693,7 @@ nfs3_pathconf_resume (void *carg)
 nfs3err:
         if (ret < 0) {
                 nfs3_log_common_res (rpcsvc_request_xid (cs->req),
-                                     "PATHCONF", stat, -ret);
+                                     NFS3_PATHCONF, stat, -ret);
                 nfs3_pathconf_reply (cs->req, stat, NULL);
                 nfs3_call_state_wipe (cs);
         }
@@ -4728,7 +4728,7 @@ nfs3_pathconf (rpcsvc_request_t *req, struct nfs3_fh *fh)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (req), "PATHCONF",
+                nfs3_log_common_res (rpcsvc_request_xid (req), NFS3_PATHCONF,
                                      stat, -ret);
                 nfs3_pathconf_reply (req, stat, NULL);
                 nfs3_call_state_wipe (cs);
@@ -4837,7 +4837,7 @@ nfs3_commit_resume (void *carg)
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "COMMIT",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_COMMIT,
                                      stat, -ret);
                 nfs3_commit_reply (cs->req, stat, cs->nfs3state->serverstart,
                                    NULL, NULL);
@@ -4867,7 +4867,7 @@ nfs3_commit_open_resume (void *carg)
                 stat = nfs3_errno_to_nfsstat3 (-ret);
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (cs->req), "COMMIT",
+                nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_COMMIT,
                                      stat, -ret);
                 nfs3_commit_reply (cs->req, stat, 0, NULL, NULL);
                 nfs3_call_state_wipe (cs);
@@ -4911,7 +4911,7 @@ nfs3_commit (rpcsvc_request_t *req, struct nfs3_fh *fh, offset3 offset,
 
 nfs3err:
         if (ret < 0) {
-                nfs3_log_common_res (rpcsvc_request_xid (req), "COMMIT",
+                nfs3_log_common_res (rpcsvc_request_xid (req), NFS3_COMMIT,
                                      stat, -ret);
                 nfs3_commit_reply (req, stat, 0, NULL, NULL);
                 nfs3_call_state_wipe (cs);
