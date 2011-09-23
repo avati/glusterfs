@@ -141,25 +141,7 @@ nfs_zero_filled_stat (struct iatt *buf)
 void
 nfs_loc_wipe (loc_t *loc)
 {
-        if (!loc)
-                return;
-
-        if (loc->path) {
-                GF_FREE ((char *)loc->path);
-                loc->path = NULL;
-        }
-
-        if (loc->parent) {
-                inode_unref (loc->parent);
-                loc->parent = NULL;
-	}
-
-        if (loc->inode) {
-                inode_unref (loc->inode);
-                loc->inode = NULL;
-        }
-
-        loc->ino = 0;
+        loc_wipe (loc);
 }
 
 
@@ -211,8 +193,6 @@ nfs_loc_fill (loc_t *loc, inode_t *inode, inode_t *parent, char *path)
 		gf_log (GF_NFS, GF_LOG_TRACE, "Getting the inode.");
                 loc->inode = inode_ref (inode);
                 loc->ino = inode->ino;
-		if (!uuid_is_null (inode->gfid))
-	                uuid_copy (loc->gfid, inode->gfid);
         } else
 		gf_log (GF_NFS, GF_LOG_TRACE, "No inode got.");
 
@@ -392,6 +372,8 @@ nfs_entry_loc_fill (inode_table_t *itable, uuid_t pargfid, char *entry,
         /* Will need hard resolution now */
         if (!parent)
                 goto err;
+
+        uuid_copy (loc->pargfid, pargfid);
 
         ret = -2;
         entryinode = inode_grep (itable, parent, entry);
