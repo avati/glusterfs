@@ -591,13 +591,14 @@ __fd_anonymous (inode_t *inode)
 
         fd = __fd_lookup (inode, -1);
 
-        if (!fd)
+        if (!fd) {
                 fd = __fd_create (inode, -1);
 
-        if (!fd)
-                return NULL;
+                if (!fd)
+                        return NULL;
 
-        __fd_bind (fd);
+                __fd_bind (fd);
+        }
 
         __fd_ref (fd);
 
