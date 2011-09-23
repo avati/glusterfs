@@ -1293,12 +1293,19 @@ nfs3_lookup_resume (void *carg)
         int                             ret = -EFAULT;
         nfs_user_t                      nfu = {0, };
         nfs3_call_state_t               *cs = NULL;
+	struct nfs3_fh			newfh = {{0}, };
 
         if (!carg)
                 return ret;
 
         cs = (nfs3_call_state_t *)carg;
         nfs3_check_fh_resolve_status (cs, stat, nfs3err);
+	if (cs->hardresolved) {
+		stat = NFS3_OK;
+		nfs3_fh_build_child_fh (&cs->parent, &cs->stbuf, &newfh);
+		goto nfs3err;
+	}
+
         nfs_request_user_init (&nfu, cs->req);
         cs->parent = cs->resolvefh;
         ret = nfs_lookup (cs->nfsx, cs->vol, &nfu, &cs->resolvedloc,
@@ -1310,7 +1317,8 @@ nfs3err:
         if (ret < 0) {
                 nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_LOOKUP,
                                      stat, -ret);
-                nfs3_lookup_reply (cs->req, stat, NULL, NULL, NULL);
+                nfs3_lookup_reply (cs->req, stat, &newfh, &cs->stbuf,
+				   &cs->postparent);
                 nfs3_call_state_wipe (cs);
         }
 

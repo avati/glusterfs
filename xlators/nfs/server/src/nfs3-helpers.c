@@ -4118,6 +4118,8 @@ nfs3_fh_resolve_entry_lookup_cbk (call_frame_t *frame, void *cookie,
                 gf_log (GF_NFS3, GF_LOG_TRACE, "Entry looked up: %s",
                         cs->resolvedloc.path);
 
+	memcpy (&cs->stbuf, buf, sizeof (*buf));
+	memcpy (&cs->postparent, postparent, sizeof (*postparent));
         linked_inode = inode_link (inode, cs->resolvedloc.parent,
                                    cs->resolvedloc.name, buf);
         if (linked_inode) {
@@ -4607,9 +4609,11 @@ nfs3_fh_resolve_entry_hard (nfs3_call_state_t *cs)
                         cs->lookuptype = GF_NFS3_FRESH;
                         cs->resolve_ret = 0;
                         nfs3_call_resume (cs);
-                } else
+                } else {
+			cs->hardresolved = 1;
                         nfs_lookup (cs->nfsx, cs->vol, &nfu, &cs->resolvedloc,
                                     nfs3_fh_resolve_entry_lookup_cbk, cs);
+		}
                 ret = 0;
         } else if (ret == -1) {
                 gf_log (GF_NFS3, GF_LOG_TRACE, "Entry needs parent lookup: %s",
