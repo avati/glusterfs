@@ -4178,7 +4178,13 @@ nfs3_readdir_open_resume (void *carg)
 
         cs = (nfs3_call_state_t *)carg;
         nfs3_check_fh_resolve_status (cs, stat, nfs3err);
-        ret = nfs3_dir_open_and_resume (cs, nfs3_readdir_read_resume);
+        cs->fd = fd_anonymous (cs->resolvedloc.inode);
+        if (!cs->fd) {
+                gf_log (GF_NFS3, GF_LOG_ERROR, "Faile to create anonymous fd");
+                goto nfs3err;
+        }
+
+        ret = nfs3_readdir_read_resume (cs);
         if (ret < 0)
                 stat = nfs3_errno_to_nfsstat3 (-ret);
 
