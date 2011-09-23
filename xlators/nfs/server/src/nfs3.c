@@ -1785,16 +1785,22 @@ nfs3_read_resume (void *carg)
         nfsstat3                        stat = NFS3ERR_SERVERFAULT;
         int                             ret = -EFAULT;
         nfs3_call_state_t               *cs = NULL;
+        fd_t                            *fd = NULL;
 
         if (!carg)
                 return ret;
 
         cs = (nfs3_call_state_t *)carg;
         nfs3_check_fh_resolve_status (cs, stat, nfs3err);
-        ret = nfs3_file_open_and_resume (cs, nfs3_read_fd_resume);
-        if (ret < 0)
-                stat = nfs3_errno_to_nfsstat3 (-ret);
+        fd = fd_anonymous (cs->resolvedloc.inode);
+        if (!fd) {
+                gf_log (GF_NFS3, GF_LOG_ERROR, "Failed to create anonymous fd");
+                goto nfs3err;
+        }
 
+        cs->fd = fd;
+        nfs3_read_fd_resume (cs);
+        ret = 0;
 nfs3err:
         if (ret < 0) {
                 nfs3_log_common_res (rpcsvc_request_xid (cs->req), NFS3_READ,
@@ -2080,13 +2086,20 @@ nfs3_write_resume (void *carg)
         nfsstat3                stat = NFS3ERR_SERVERFAULT;
         int                     ret = -EFAULT;
         nfs3_call_state_t       *cs = NULL;
+        fd_t                    *fd = NULL;
 
         if (!carg)
                 return ret;
 
         cs = (nfs3_call_state_t *)carg;
         nfs3_check_fh_resolve_status (cs, stat, nfs3err);
+        fd = fd_anonymous (cs->resolvedloc.inode);
+        if (!fd) {
+                gf_log (GF_NFS3, GF_LOG_ERROR, "Failed to create anonymous fd");
+                goto nfs3err;
+        }
 
+        cs->fd = fd;    /* Gets unrefd when the call state is wiped. */
         ret = __nfs3_write_resume (cs);
         if (ret < 0)
                 stat = nfs3_errno_to_nfsstat3 (-ret);
@@ -2161,7 +2174,7 @@ nfs3_write (rpcsvc_request_t *req, struct nfs3_fh *fh, offset3 offset,
         cs->datavec = payload;
 
 
-        ret = nfs3_fh_resolve_and_resume (cs, fh, NULL, nfs3_write_open_resume);
+        ret = nfs3_fh_resolve_and_resume (cs, fh, NULL, nfs3_write_resume);
         if (ret < 0)
                 stat = nfs3_errno_to_nfsstat3 (-ret);
 

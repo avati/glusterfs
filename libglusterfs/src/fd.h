@@ -173,4 +173,6 @@ __fd_ref (fd_t *fd);
 void
 fd_ctx_dump (fd_t *fd, char *prefix);
 
+extern fd_t *
+fd_anonymous (inode_t *inode);
 #endif /* _FD_H */
