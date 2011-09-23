@@ -1562,7 +1562,7 @@ inode_dump (inode_t *inode, char *prefix)
                         INIT_LIST_HEAD (&fd_wrapper->next);
                         list_add_tail (&fd_wrapper->next, &fd_list);
 
-                        fd_wrapper->fd = _fd_ref (fd);
+                        fd_wrapper->fd = __fd_ref (fd);
                 }
         }
 unlock:
