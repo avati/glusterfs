@@ -4879,7 +4879,7 @@ nfs3err:
                 ret = 0;
         }
 
-        return ret;
+        return 0;
 }
 
 
@@ -4895,8 +4895,13 @@ nfs3_commit_open_resume (void *carg)
 
         cs = (nfs3_call_state_t *)carg;
         nfs3_check_fh_resolve_status (cs, stat, nfs3err);
+        cs->fd = fd_anonymous (cs->resolvedloc.inode);
+        if (!cs->fd) {
+                gf_log (GF_NFS3, GF_LOG_ERROR, "Failed to create anonymous fd.");
+                goto nfs3err;
+        }
 
-        ret = nfs3_file_open_and_resume (cs, nfs3_commit_resume);
+        ret = nfs3_commit_resume (cs);
         if (ret < 0)
                 stat = nfs3_errno_to_nfsstat3 (-ret);
 nfs3err:
