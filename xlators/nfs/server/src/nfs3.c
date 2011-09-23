@@ -706,12 +706,19 @@ nfs3_getattr_resume (void *carg)
          * for the root to have been looked up when the getattr on the root is
          * sent. AND, this causes a problem for stat-prefetch in that it
          * expects even the root inode to have been looked up.
-         */
         if (cs->resolvedloc.inode->ino == 1)
                 ret = nfs_lookup (cs->nfsx, cs->vol, &nfu, &cs->resolvedloc,
                                   nfs3svc_getattr_lookup_cbk, cs);
         else
-                ret = nfs_stat (cs->nfsx, cs->vol, &nfu, &cs->resolvedloc,
+         */
+
+	if (cs->hardresolved) {
+		ret = -EFAULT;
+		stat = NFS3_OK;
+		goto nfs3err;
+	}
+
+        ret = nfs_stat (cs->nfsx, cs->vol, &nfu, &cs->resolvedloc,
                                 nfs3svc_getattr_stat_cbk, cs);
 
         if (ret < 0) {
@@ -724,7 +731,7 @@ nfs3err:
         if (ret < 0) {
                 nfs3_log_common_res (rpcsvc_request_xid (cs->req),
                                      NFS3_GETATTR, stat, -ret);
-                nfs3_getattr_reply (cs->req, stat, NULL);
+                nfs3_getattr_reply (cs->req, stat, &cs->stbuf);
                 nfs3_call_state_wipe (cs);
                 ret = 0;
         }
