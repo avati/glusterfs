@@ -33,6 +33,8 @@ resolve_entry_simple (call_frame_t *frame);
 int
 resolve_inode_simple (call_frame_t *frame);
 int
+resolve_anonfd_simple (call_frame_t *frame);
+int
 resolve_deep_continue (call_frame_t *frame);
 
 
@@ -211,7 +213,10 @@ resolve_deep_continue (call_frame_t *frame)
         resolve->op_ret   = 0;
         resolve->op_errno = 0;
 
-        if (!uuid_is_null (resolve->pargfid))
+        if (resolve->fd_no != -1) {
+                ret = resolve_anonfd_simple (frame);
+                goto out;
+        } else if (!uuid_is_null (resolve->pargfid))
                 ret = resolve_entry_simple (frame);
         else if (!uuid_is_null (resolve->gfid))
                 ret = resolve_inode_simple (frame);
@@ -220,7 +225,7 @@ resolve_deep_continue (call_frame_t *frame)
                         "return value of resolve_*_simple %d", ret);
 
         resolve_loc_touchup (frame);
-
+out:
         server_resolve_all (frame);
 
         return 0;
@@ -396,6 +401,62 @@ server_resolve_inode (call_frame_t *frame)
 
 
 int
+resolve_anonfd_simple (call_frame_t *frame)
+{
+        server_state_t     *state = NULL;
+        server_resolve_t   *resolve = NULL;
+        inode_t            *inode = NULL;
+        int                 ret = 0;
+
+        state = CALL_STATE (frame);
+        resolve = state->resolve_now;
+
+        inode = inode_find (state->itable, resolve->gfid);
+
+        if (!inode) {
+                resolve->op_ret   = -1;
+                resolve->op_errno = ENOENT;
+                ret = 1;
+                goto out;
+        }
+
+        ret = 0;
+
+        state->fd = fd_anonymous (inode);
+out:
+        if (inode)
+                inode_unref (inode);
+
+        return ret;
+}
+
+
+int
+server_resolve_anonfd (call_frame_t *frame)
+{
+        server_state_t     *state = NULL;
+        int                 ret = 0;
+        loc_t              *loc = NULL;
+
+        state = CALL_STATE (frame);
+        loc  = state->loc_now;
+
+        ret = resolve_anonfd_simple (frame);
+
+        if (ret > 0) {
+                loc_wipe (loc);
+                resolve_gfid (frame);
+                return 0;
+        }
+
+        server_resolve_all (frame);
+
+        return 0;
+
+}
+
+
+int
 server_resolve_fd (call_frame_t *frame)
 {
         server_state_t       *state = NULL;
@@ -408,6 +469,11 @@ server_resolve_fd (call_frame_t *frame)
         conn  = SERVER_CONNECTION (frame);
 
         fd_no = resolve->fd_no;
+
+        if (fd_no == -2) {
+                server_resolve_anonfd (frame);
+                return 0;
+        }
 
         state->fd = gf_fd_fdptr_get (conn->fdtable, fd_no);
 

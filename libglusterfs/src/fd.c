@@ -269,6 +269,10 @@ gf_fd_put (fdtable_t *fdtable, int32_t fd)
         fd_t *fdptr = NULL;
         fdentry_t *fde = NULL;
 
+        if (fd == -2)
+                /* anonymous fd */
+                return;
+
         if (fdtable == NULL || fd < 0) {
                 gf_log_callingfn ("fd", GF_LOG_ERROR, "invalid argument");
                 return;

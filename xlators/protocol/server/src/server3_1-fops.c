@@ -3041,6 +3041,7 @@ server_readv (rpcsvc_request_t *req)
         state->resolve.fd_no  = args.fd;
         state->size           = args.size;
         state->offset         = args.offset;
+        memcpy (state->resolve.gfid, args.gfid, 16);
 
         ret = 0;
         resolve_and_resume (frame, server_readv_resume);
@@ -3088,6 +3089,7 @@ server_writev (rpcsvc_request_t *req)
         state->resolve.fd_no = args.fd;
         state->offset        = args.offset;
         state->iobref        = iobref_ref (req->iobref);
+        memcpy (state->resolve.gfid, args.gfid, 16);
 
         if (len < req->msg[0].iov_len) {
                 state->payload_vector[0].iov_base
@@ -3229,6 +3231,7 @@ server_fsync (rpcsvc_request_t *req)
         state->resolve.type  = RESOLVE_MUST;
         state->resolve.fd_no = args.fd;
         state->flags         = args.data;
+        memcpy (state->resolve.gfid, args.gfid, 16);
 
         ret = 0;
         resolve_and_resume (frame, server_fsync_resume);
@@ -3272,6 +3275,7 @@ server_flush (rpcsvc_request_t *req)
 
         state->resolve.type  = RESOLVE_MUST;
         state->resolve.fd_no = args.fd;
+        memcpy (state->resolve.gfid, args.gfid, 16);
 
         ret = 0;
         resolve_and_resume (frame, server_flush_resume);
@@ -3316,6 +3320,7 @@ server_ftruncate (rpcsvc_request_t *req)
         state->resolve.type   = RESOLVE_MUST;
         state->resolve.fd_no  = args.fd;
         state->offset         = args.offset;
+        memcpy (state->resolve.gfid, args.gfid, 16);
 
         ret = 0;
         resolve_and_resume (frame, server_ftruncate_resume);
@@ -3358,6 +3363,7 @@ server_fstat (rpcsvc_request_t *req)
 
         state->resolve.type    = RESOLVE_MUST;
         state->resolve.fd_no   = args.fd;
+        memcpy (state->resolve.gfid, args.gfid, 16);
 
         ret = 0;
         resolve_and_resume (frame, server_fstat_resume);
@@ -3588,6 +3594,7 @@ server_fsetxattr (rpcsvc_request_t *req)
         state->resolve.type      = RESOLVE_MUST;
         state->resolve.fd_no     = args.fd;
         state->flags             = args.flags;
+        memcpy (state->resolve.gfid, args.gfid, 16);
 
         if (args.dict.dict_len) {
                 dict = dict_new ();
@@ -3875,6 +3882,7 @@ server_fgetxattr (rpcsvc_request_t *req)
 
         state->resolve.type  = RESOLVE_MUST;
         state->resolve.fd_no = args.fd;
+        memcpy (state->resolve.gfid, args.gfid, 16);
 
         if (args.namelen)
                 state->name = gf_strdup (args.name);
@@ -4028,6 +4036,7 @@ server_readdirp (rpcsvc_request_t *req)
         state->resolve.type = RESOLVE_MUST;
         state->resolve.fd_no = args.fd;
         state->offset = args.offset;
+        memcpy (state->resolve.gfid, args.gfid, 16);
 
         ret = 0;
         resolve_and_resume (frame, server_readdirp_resume);
@@ -4082,6 +4091,7 @@ server_readdir (rpcsvc_request_t *req)
         state->resolve.type = RESOLVE_MUST;
         state->resolve.fd_no = args.fd;
         state->offset = args.offset;
+        memcpy (state->resolve.gfid, args.gfid, 16);
 
         ret = 0;
         resolve_and_resume (frame, server_readdir_resume);
@@ -4124,6 +4134,7 @@ server_fsyncdir (rpcsvc_request_t *req)
         state->resolve.type = RESOLVE_MUST;
         state->resolve.fd_no = args.fd;
         state->flags = args.data;
+        memcpy (state->resolve.gfid, args.gfid, 16);
 
         ret = 0;
         resolve_and_resume (frame, server_fsyncdir_resume);
@@ -4491,6 +4502,7 @@ server_finodelk (rpcsvc_request_t *req)
         state->volume = gf_strdup (args.volume);
         state->resolve.fd_no = args.fd;
         state->cmd = args.cmd;
+        memcpy (state->resolve.gfid, args.gfid, 16);
 
         switch (state->cmd) {
         case GF_LK_GETLK:
@@ -4619,6 +4631,7 @@ server_fentrylk (rpcsvc_request_t *req)
         state->resolve.fd_no = args.fd;
         state->cmd  = args.cmd;
         state->type = args.type;
+        memcpy (state->resolve.gfid, args.gfid, 16);
 
         if (args.namelen)
                 state->name = gf_strdup (args.name);
@@ -4916,6 +4929,7 @@ server_lk (rpcsvc_request_t *req)
         state->resolve.fd_no = args.fd;
         state->cmd =  args.cmd;
         state->type = args.type;
+        memcpy (state->resolve.gfid, args.gfid, 16);
 
         switch (state->cmd) {
         case GF_LK_GETLK:
