@@ -2091,21 +2091,15 @@ wb_writev (call_frame_t *frame, xlator_t *this, fd_t *fd, struct iovec *vector,
 
         if ((!IA_ISDIR (fd->inode->ia_type))
             && fd_ctx_get (fd, this, &tmp_file)) {
-                gf_log (this->name, GF_LOG_WARNING,
-                        "write behind file pointer is"
-                        " not stored in context of fd(%p), returning EBADFD",
-                        fd);
-
-                op_errno = EBADFD;
-                goto unwind;
-        }
-
-        file = (wb_file_t *)(long)tmp_file;
-        if ((!IA_ISDIR (fd->inode->ia_type)) && (file == NULL)) {
-                gf_log (this->name, GF_LOG_WARNING,
-                        "wb_file not found for fd %p", fd);
-                op_errno = EBADFD;
-                goto unwind;
+                file = wb_file_create (this, fd, 0);
+        } else {
+                file = (wb_file_t *)(long)tmp_file;
+                if ((!IA_ISDIR (fd->inode->ia_type)) && (file == NULL)) {
+                        gf_log (this->name, GF_LOG_WARNING,
+                                "wb_file not found for fd %p", fd);
+                        op_errno = EBADFD;
+                        goto unwind;
+                }
         }
 
         if (file != NULL) {
