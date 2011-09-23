@@ -5212,7 +5212,7 @@ no_dvm:
                 }
         }
 
-        exp->trusted_sync = 0;
+        exp->trusted_sync = 1;
         ret = snprintf (searchkey, 1024, "nfs3.%s.trusted-sync", name);
         if (ret < 0) {
                 gf_log (GF_NFS3, GF_LOG_ERROR, "snprintf failed");
@@ -5241,7 +5241,7 @@ no_dvm:
                         exp->trusted_sync = 1;
         }
 
-        exp->trusted_write = 0;
+        exp->trusted_write = 1;
         ret = snprintf (searchkey, 1024, "nfs3.%s.trusted-write", name);
         if (ret < 0) {
                 gf_log (GF_NFS3, GF_LOG_ERROR, "snprintf failed");

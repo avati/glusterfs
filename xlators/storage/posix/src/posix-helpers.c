@@ -978,7 +978,10 @@ __posix_fd_ctx_get (fd_t *fd, xlator_t *this, struct posix_fd **pfd_p)
 
         ret = __fd_ctx_set (fd, this, (uint64_t) (long) pfd);
         if (ret != 0) {
-                close (_fd);
+                if (_fd != -1)
+                        close (_fd);
+                if (dir)
+                        closedir (dir);
                 GF_FREE (pfd);
                 pfd = NULL;
                 goto out;
