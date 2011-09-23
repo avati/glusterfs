@@ -923,3 +923,85 @@ posix_entry_create_xattr_set (xlator_t *this, const char *path,
 out:
         return ret;
 }
+
+
+static int
+__posix_fd_ctx_get (fd_t *fd, xlator_t *this, struct posix_fd **pfd_p)
+{
+        uint64_t          tmp_pfd = 0;
+        struct posix_fd  *pfd = NULL;
+        int               ret = -1;
+        char             *real_path = NULL;
+        int               _fd = -1;
+        DIR              *dir = NULL;
+
+        ret = __fd_ctx_get (fd, this, &tmp_pfd);
+        if (ret == 0) {
+                pfd = (void *)(long) tmp_pfd;
+                ret = 0;
+                goto out;
+        }
+
+        if (fd->pid != -1)
+                /* anonymous fd */
+                goto out;
+
+        MAKE_HANDLE_PATH (real_path, this, fd->inode->gfid, NULL);
+
+        pfd = GF_CALLOC (1, sizeof (*pfd), gf_posix_mt_posix_fd);
+        if (!pfd) {
+                goto out;
+        }
+        pfd->fd = -1;
+
+        if (fd->inode->ia_type == IA_IFDIR) {
+                dir = opendir (real_path);
+                if (!dir) {
+                        GF_FREE (pfd);
+                        pfd = NULL;
+                        goto out;
+                }
+                _fd = dirfd (dir);
+        }
+
+        if (fd->inode->ia_type == IA_IFREG) {
+                _fd = open (real_path, O_RDWR|O_LARGEFILE);
+                if (_fd == -1) {
+                        GF_FREE (pfd);
+                        pfd = NULL;
+                        goto out;
+                }
+        }
+
+        pfd->fd = _fd;
+        pfd->dir = dir;
+
+        ret = __fd_ctx_set (fd, this, (uint64_t) (long) pfd);
+        if (ret != 0) {
+                close (_fd);
+                GF_FREE (pfd);
+                pfd = NULL;
+                goto out;
+        }
+
+        ret = 0;
+out:
+        if (pfd_p)
+                *pfd_p = pfd;
+        return ret;
+}
+
+
+int
+posix_fd_ctx_get (fd_t *fd, xlator_t *this, struct posix_fd **pfd)
+{
+        int   ret;
+
+        LOCK (&fd->inode->lock);
+        {
+                ret = __posix_fd_ctx_get (fd, this, pfd);
+        }
+
+        return ret;
+}
+

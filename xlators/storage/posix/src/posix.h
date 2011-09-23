@@ -147,5 +147,6 @@ int posix_gfid_heal (xlator_t *this, const char *path, dict_t *xattr_req);
 int posix_entry_create_xattr_set (xlator_t *this, const char *path,
                                   dict_t *dict);
 
+int posix_fd_ctx_get (fd_t *fd, xlator_t *this, struct posix_fd **pfd);
 
 #endif /* _POSIX_H */
