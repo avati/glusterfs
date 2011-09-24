@@ -575,7 +575,7 @@ server_setvolume (rpcsvc_request_t *req)
                         conn->bound_xl->name);
 
                 /* TODO: what is this ? */
-                conn->bound_xl->itable = inode_table_new (conf->inode_lru_limit,
+                conn->bound_xl->itable = inode_table_new (1048576,
                                                           conn->bound_xl);
         }
 
