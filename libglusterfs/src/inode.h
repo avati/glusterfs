@@ -162,6 +162,12 @@ int
 inode_ctx_put (inode_t *inode, xlator_t *xlator, uint64_t value);
 
 int
+__inode_ctx_set (inode_t *inode, xlator_t *xlator, uint64_t *value);
+
+int
+inode_ctx_set (inode_t *inode, xlator_t *xlator, uint64_t *value);
+
+int
 __inode_ctx_get (inode_t *inode, xlator_t *xlator, uint64_t *value);
 
 int
@@ -173,6 +179,13 @@ inode_ctx_del (inode_t *inode, xlator_t *xlator, uint64_t *value);
 int
 inode_ctx_put2 (inode_t *inode, xlator_t *xlator, uint64_t value1,
                 uint64_t value2);
+
+int
+inode_ctx_set2 (inode_t *inode, xlator_t *xlator, uint64_t *value1,
+                uint64_t *value2);
+int
+__inode_ctx_set2 (inode_t *inode, xlator_t *xlator, uint64_t *value1,
+                  uint64_t *value2);
 
 int
 inode_ctx_get2 (inode_t *inode, xlator_t *xlator, uint64_t *value1,

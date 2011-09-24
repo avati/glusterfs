@@ -1321,45 +1321,47 @@ out:
 
 
 int
-__inode_ctx_put2 (inode_t *inode, xlator_t *xlator, uint64_t value1,
-                  uint64_t value2)
+__inode_ctx_set2 (inode_t *inode, xlator_t *xlator, uint64_t *value1_p,
+                  uint64_t *value2_p)
 {
         int ret = 0;
         int index = 0;
-        int put_idx = -1;
+        int set_idx = -1;
 
         if (!inode || !xlator)
                 return -1;
 
         for (index = 0; index < xlator->graph->xl_count; index++) {
                 if (!inode->_ctx[index].xl_key) {
-                        if (put_idx == -1)
-                                put_idx = index;
+                        if (set_idx == -1)
+                                set_idx = index;
                         /* dont break, to check if key already exists
                            further on */
                 }
                 if (inode->_ctx[index].xl_key == xlator) {
-                        put_idx = index;
+                        set_idx = index;
                         break;
                 }
         }
 
-        if (put_idx == -1) {
+        if (set_idx == -1) {
                 ret = -1;
                 goto out;;
         }
 
-        inode->_ctx[put_idx].xl_key = xlator;
-        inode->_ctx[put_idx].value1 = value1;
-        inode->_ctx[put_idx].value2 = value2;
+        inode->_ctx[set_idx].xl_key = xlator;
+        if (value1_p)
+                inode->_ctx[set_idx].value1 = *value1_p;
+        if (value2_p)
+                inode->_ctx[set_idx].value2 = *value2_p;
 out:
         return ret;
 }
 
 
 int
-inode_ctx_put2 (inode_t *inode, xlator_t *xlator, uint64_t value1,
-                uint64_t value2)
+inode_ctx_set2 (inode_t *inode, xlator_t *xlator, uint64_t *value1_p,
+                uint64_t *value2_p)
 {
         int ret = 0;
 
@@ -1368,7 +1370,7 @@ inode_ctx_put2 (inode_t *inode, xlator_t *xlator, uint64_t value1,
 
         LOCK (&inode->lock);
         {
-                ret = __inode_ctx_put2 (inode, xlator, value1, value2);
+                ret = __inode_ctx_set2 (inode, xlator, value1_p, value2_p);
         }
         UNLOCK (&inode->lock);
 
@@ -1467,14 +1469,14 @@ unlock:
 int
 __inode_ctx_put (inode_t *inode, xlator_t *key, uint64_t value)
 {
-        return __inode_ctx_put2 (inode, key, value, 0);
+        return __inode_ctx_set2 (inode, key, &value, 0);
 }
 
 
 int
 inode_ctx_put (inode_t *inode, xlator_t *key, uint64_t value)
 {
-        return inode_ctx_put2 (inode, key, value, 0);
+        return inode_ctx_set2 (inode, key, &value, 0);
 }
 
 
