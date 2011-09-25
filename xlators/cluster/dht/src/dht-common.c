@@ -1284,7 +1284,11 @@ dht_lookup (call_frame_t *frame, xlator_t *this,
 
                 local->inode = inode_ref (loc->inode);
 
-                call_cnt = local->call_cnt = layout->cnt;
+                cached_subvol = dht_subvol_get_cached (this, loc->inode);
+
+
+//                call_cnt = local->call_cnt = layout->cnt;
+                call_cnt = local->call_cnt = 1;
 
                 /* NOTE: we don't require 'trusted.glusterfs.dht.linkto' attribute,
                  *       revalidates directly go to the cached-subvolume.
@@ -1297,6 +1301,7 @@ dht_lookup (call_frame_t *frame, xlator_t *this,
                 ret = dict_set_uint32 (local->xattr_req,
                                        GLUSTERFS_OPEN_FD_COUNT, 4);
 
+/*
 		for (i = 0; i < layout->cnt; i++) {
 			subvol = layout->list[i].xlator;
 
@@ -1307,6 +1312,11 @@ dht_lookup (call_frame_t *frame, xlator_t *this,
 			if (!--call_cnt)
 				break;
 		}
+*/
+                subvol = cached_subvol;
+                STACK_WIND (frame, dht_revalidate_cbk,
+                            subvol, subvol->fops->lookup,
+                            &local->loc, local->xattr_req);
         } else {
         do_fresh_lookup:
                 /* TODO: remove the hard-coding */

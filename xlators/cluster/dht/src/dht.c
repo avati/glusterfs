@@ -525,7 +525,7 @@ struct volume_options options[] = {
           .value = {"auto", "yes", "no", "enable", "disable", "1", "0",
                     "on", "off"},
           .type = GF_OPTION_TYPE_STR,
-          .default_value = "on",
+          .default_value = "off",
         },
         { .key  = {"min-free-disk"},
           .type = GF_OPTION_TYPE_PERCENT_OR_SIZET,
