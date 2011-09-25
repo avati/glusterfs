@@ -292,7 +292,6 @@ nfs_gfid_loc_fill (inode_table_t *itable, uuid_t gfid, loc_t *loc, int how)
                                 goto err;
                         }
 
-			uuid_copy (loc->gfid, gfid);
                 } else {
 			gf_log (GF_NFS, GF_LOG_ERROR, "Inode not found in itable and no creation was requested.");
                         ret = -ENOENT;
@@ -301,6 +300,8 @@ nfs_gfid_loc_fill (inode_table_t *itable, uuid_t gfid, loc_t *loc, int how)
         } else {
 		gf_log (GF_NFS, GF_LOG_TRACE, "Inode was found in the itable.");
 	}
+
+        uuid_copy (loc->gfid, gfid);
 
         ret = nfs_inode_loc_fill (inode, loc, how);
 	if (ret < 0) {

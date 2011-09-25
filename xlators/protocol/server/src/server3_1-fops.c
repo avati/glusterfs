@@ -5044,7 +5044,7 @@ server_lookup (rpcsvc_request_t *req)
 
         state->resolve.type   = RESOLVE_DONTCARE;
 
-        if (args.bname) {
+        if (args.bname && strcmp (args.bname, "")) {
                 memcpy (state->resolve.pargfid, args.pargfid, 16);
                 state->resolve.bname = gf_strdup (args.bname);
         } else {

@@ -62,7 +62,9 @@ struct md_cache {
 
 
 struct mdc_local {
-        loc_t    loc;
+        loc_t     loc;
+        loc_t     loc2;
+        fd_t     *fd;
 };
 
 
@@ -92,6 +94,11 @@ mdc_local_wipe (xlator_t *this, mdc_local_t *local)
                 return;
 
         loc_wipe (&local->loc);
+
+        loc_wipe (&local->loc2);
+
+        fd_unref (local->fd);
+
         FREE (local);
         return;
 }
@@ -400,6 +407,18 @@ int
 mdc_stat_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
               int32_t op_ret, int32_t op_errno, struct iatt *buf)
 {
+        mdc_local_t  *local = NULL;
+
+        if (op_ret != 0)
+                goto out;
+
+        local = frame->local;
+        if (!local)
+                goto out;
+
+        mdc_inode_iatt_set (this, local->loc.inode, buf);
+
+out:
         MDC_STACK_UNWIND (stat, frame, op_ret, op_errno, buf);
 
         return 0;
@@ -409,8 +428,15 @@ mdc_stat_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
 int
 mdc_stat (call_frame_t *frame, xlator_t *this, loc_t *loc)
 {
-        int          ret;
-        struct iatt  stbuf;
+        int           ret;
+        struct iatt   stbuf;
+        mdc_local_t  *local = NULL;
+
+        local = mdc_local_get (frame);
+        if (!local)
+                goto uncached;
+
+        loc_copy (&local->loc, loc);
 
         ret = mdc_inode_iatt_get (this, loc->inode, &stbuf);
         if (ret != 0)
@@ -424,6 +450,715 @@ uncached:
         STACK_WIND (frame, mdc_stat_cbk,
                     FIRST_CHILD(this), FIRST_CHILD(this)->fops->stat,
                     loc);
+        return 0;
+}
+
+
+int
+mdc_fstat_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+               int32_t op_ret, int32_t op_errno, struct iatt *buf)
+{
+        mdc_local_t  *local = NULL;
+
+        if (op_ret != 0)
+                goto out;
+
+        local = frame->local;
+        if (!local)
+                goto out;
+
+        mdc_inode_iatt_set (this, local->fd->inode, buf);
+
+out:
+        MDC_STACK_UNWIND (fstat, frame, op_ret, op_errno, buf);
+
+        return 0;
+}
+
+
+int
+mdc_fstat (call_frame_t *frame, xlator_t *this, fd_t *fd)
+{
+        int           ret;
+        struct iatt   stbuf;
+        mdc_local_t  *local = NULL;
+
+        local = mdc_local_get (frame);
+        if (!local)
+                goto uncached;
+
+        local->fd = fd_ref (fd);
+
+        ret = mdc_inode_iatt_get (this, fd->inode, &stbuf);
+        if (ret != 0)
+                goto uncached;
+
+        MDC_STACK_UNWIND (fstat, frame, 0, 0, &stbuf);
+
+        return 0;
+
+uncached:
+        STACK_WIND (frame, mdc_fstat_cbk,
+                    FIRST_CHILD(this), FIRST_CHILD(this)->fops->fstat,
+                    fd);
+        return 0;
+}
+
+
+int
+mdc_truncate_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+                  int32_t op_ret, int32_t op_errno,
+                  struct iatt *prebuf, struct iatt *postbuf)
+{
+        mdc_local_t  *local = NULL;
+
+        local = frame->local;
+
+        if (op_ret != 0)
+                goto out;
+
+        if (!local)
+                goto out;
+
+        mdc_inode_iatt_set (this, local->loc.inode, postbuf);
+
+out:
+        MDC_STACK_UNWIND (truncate, frame, op_ret, op_errno, prebuf, postbuf);
+
+        return 0;
+}
+
+
+int
+mdc_truncate (call_frame_t *frame, xlator_t *this, loc_t *loc,
+              off_t offset)
+{
+        mdc_local_t  *local = NULL;
+
+        local = mdc_local_get (frame);
+
+        local->loc.inode = inode_ref (loc->inode);
+
+        STACK_WIND (frame, mdc_truncate_cbk,
+                    FIRST_CHILD(this), FIRST_CHILD(this)->fops->truncate,
+                    loc, offset);
+        return 0;
+}
+
+
+int
+mdc_ftruncate_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+                   int32_t op_ret, int32_t op_errno,
+                   struct iatt *prebuf, struct iatt *postbuf)
+{
+        mdc_local_t  *local = NULL;
+
+        local = frame->local;
+
+        if (op_ret != 0)
+                goto out;
+
+        if (!local)
+                goto out;
+
+        mdc_inode_iatt_set (this, local->fd->inode, postbuf);
+
+out:
+        MDC_STACK_UNWIND (ftruncate, frame, op_ret, op_errno, prebuf, postbuf);
+
+        return 0;
+}
+
+
+int
+mdc_ftruncate (call_frame_t *frame, xlator_t *this, fd_t *fd,
+               off_t offset)
+{
+        mdc_local_t  *local = NULL;
+
+        local = mdc_local_get (frame);
+
+        local->fd = fd_ref (fd);
+
+        STACK_WIND (frame, mdc_ftruncate_cbk,
+                    FIRST_CHILD(this), FIRST_CHILD(this)->fops->ftruncate,
+                    fd, offset);
+        return 0;
+}
+
+
+int
+mdc_mknod_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+               int32_t op_ret, int32_t op_errno, inode_t *inode,
+               struct iatt *buf, struct iatt *preparent, struct iatt *postparent)
+{
+        mdc_local_t *local = NULL;
+
+        local = frame->local;
+
+        if (op_ret != 0)
+                goto out;
+
+        if (!local)
+                goto out;
+
+        if (local->loc.parent) {
+                mdc_inode_iatt_set (this, local->loc.parent, postparent);
+        }
+
+        if (local->loc.inode) {
+                mdc_inode_iatt_set (this, local->loc.inode, buf);
+        }
+out:
+        MDC_STACK_UNWIND (mknod, frame, op_ret, op_errno, inode, buf,
+                          preparent, postparent);
+        return 0;
+}
+
+
+int
+mdc_mknod (call_frame_t *frame, xlator_t *this, loc_t *loc,
+           mode_t mode, dev_t rdev, dict_t *params)
+{
+        mdc_local_t  *local = NULL;
+
+        local = mdc_local_get (frame);
+
+        loc_copy (&local->loc, loc);
+
+        STACK_WIND (frame, mdc_mknod_cbk,
+                    FIRST_CHILD(this), FIRST_CHILD(this)->fops->mknod,
+                    loc, mode, rdev, params);
+        return 0;
+}
+
+
+int
+mdc_mkdir_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+               int32_t op_ret, int32_t op_errno, inode_t *inode,
+               struct iatt *buf, struct iatt *preparent, struct iatt *postparent)
+{
+        mdc_local_t *local = NULL;
+
+        local = frame->local;
+
+        if (op_ret != 0)
+                goto out;
+
+        if (!local)
+                goto out;
+
+        if (local->loc.parent) {
+                mdc_inode_iatt_set (this, local->loc.parent, postparent);
+        }
+
+        if (local->loc.inode) {
+                mdc_inode_iatt_set (this, local->loc.inode, buf);
+        }
+out:
+        MDC_STACK_UNWIND (mkdir, frame, op_ret, op_errno, inode, buf,
+                          preparent, postparent);
+        return 0;
+}
+
+
+int
+mdc_mkdir (call_frame_t *frame, xlator_t *this, loc_t *loc,
+           mode_t mode, dict_t *params)
+{
+        mdc_local_t  *local = NULL;
+
+        local = mdc_local_get (frame);
+
+        loc_copy (&local->loc, loc);
+
+        STACK_WIND (frame, mdc_mkdir_cbk,
+                    FIRST_CHILD(this), FIRST_CHILD(this)->fops->mkdir,
+                    loc, mode, params);
+        return 0;
+}
+
+
+int
+mdc_unlink_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+                int32_t op_ret, int32_t op_errno,
+                struct iatt *preparent, struct iatt *postparent)
+{
+        mdc_local_t *local = NULL;
+
+        local = frame->local;
+
+        if (op_ret != 0)
+                goto out;
+
+        if (!local)
+                goto out;
+
+        if (local->loc.parent) {
+                mdc_inode_iatt_set (this, local->loc.parent, postparent);
+        }
+
+out:
+        MDC_STACK_UNWIND (unlink, frame, op_ret, op_errno,
+                          preparent, postparent);
+        return 0;
+}
+
+
+int
+mdc_unlink (call_frame_t *frame, xlator_t *this, loc_t *loc)
+{
+        mdc_local_t  *local = NULL;
+
+        local = mdc_local_get (frame);
+
+        loc_copy (&local->loc, loc);
+
+        STACK_WIND (frame, mdc_unlink_cbk,
+                    FIRST_CHILD(this), FIRST_CHILD(this)->fops->unlink,
+                    loc);
+        return 0;
+}
+
+
+
+
+int
+mdc_rmdir_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+                int32_t op_ret, int32_t op_errno,
+                struct iatt *preparent, struct iatt *postparent)
+{
+        mdc_local_t *local = NULL;
+
+        local = frame->local;
+
+        if (op_ret != 0)
+                goto out;
+
+        if (!local)
+                goto out;
+
+        if (local->loc.parent) {
+                mdc_inode_iatt_set (this, local->loc.parent, postparent);
+        }
+
+out:
+        MDC_STACK_UNWIND (rmdir, frame, op_ret, op_errno,
+                          preparent, postparent);
+        return 0;
+}
+
+
+int
+mdc_rmdir (call_frame_t *frame, xlator_t *this, loc_t *loc, int flag)
+{
+        mdc_local_t  *local = NULL;
+
+        local = mdc_local_get (frame);
+
+        loc_copy (&local->loc, loc);
+
+        STACK_WIND (frame, mdc_rmdir_cbk,
+                    FIRST_CHILD(this), FIRST_CHILD(this)->fops->rmdir,
+                    loc, flag);
+        return 0;
+}
+
+
+int
+mdc_symlink_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+                 int32_t op_ret, int32_t op_errno, inode_t *inode,
+                 struct iatt *buf, struct iatt *preparent, struct iatt *postparent)
+{
+        mdc_local_t *local = NULL;
+
+        local = frame->local;
+
+        if (op_ret != 0)
+                goto out;
+
+        if (!local)
+                goto out;
+
+        if (local->loc.parent) {
+                mdc_inode_iatt_set (this, local->loc.parent, postparent);
+        }
+
+        if (local->loc.inode) {
+                mdc_inode_iatt_set (this, local->loc.inode, buf);
+        }
+out:
+        MDC_STACK_UNWIND (symlink, frame, op_ret, op_errno, inode, buf,
+                          preparent, postparent);
+        return 0;
+}
+
+
+int
+mdc_symlink (call_frame_t *frame, xlator_t *this, const char *linkname,
+             loc_t *loc, dict_t *params)
+{
+        mdc_local_t  *local = NULL;
+
+        local = mdc_local_get (frame);
+
+        loc_copy (&local->loc, loc);
+
+        STACK_WIND (frame, mdc_symlink_cbk,
+                    FIRST_CHILD(this), FIRST_CHILD(this)->fops->symlink,
+                    linkname, loc, params);
+        return 0;
+}
+
+
+int
+mdc_rename_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+                int32_t op_ret, int32_t op_errno, struct iatt *buf,
+                struct iatt *preoldparent, struct iatt *postoldparent,
+                struct iatt *prenewparent, struct iatt *postnewparent)
+{
+        mdc_local_t *local = NULL;
+
+        local = frame->local;
+
+        if (op_ret != 0)
+                goto out;
+
+        if (!local)
+                goto out;
+
+        if (local->loc.parent) {
+                mdc_inode_iatt_set (this, local->loc.parent, postoldparent);
+        }
+
+        if (local->loc.inode) {
+                mdc_inode_iatt_set (this, local->loc.inode, buf);
+        }
+
+        if (local->loc2.parent) {
+                mdc_inode_iatt_set (this, local->loc2.parent, postnewparent);
+        }
+out:
+        MDC_STACK_UNWIND (rename, frame, op_ret, op_errno, buf,
+                          preoldparent, postoldparent, prenewparent, postnewparent);
+        return 0;
+}
+
+
+int
+mdc_rename (call_frame_t *frame, xlator_t *this,
+            loc_t *oldloc, loc_t *newloc)
+{
+        mdc_local_t  *local = NULL;
+
+        local = mdc_local_get (frame);
+
+        loc_copy (&local->loc, oldloc);
+        loc_copy (&local->loc2, newloc);
+
+        STACK_WIND (frame, mdc_rename_cbk,
+                    FIRST_CHILD(this), FIRST_CHILD(this)->fops->rename,
+                    oldloc, newloc);
+        return 0;
+}
+
+
+int
+mdc_link_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+              int32_t op_ret, int32_t op_errno, inode_t *inode, struct iatt *buf,
+              struct iatt *preparent, struct iatt *postparent)
+{
+        mdc_local_t *local = NULL;
+
+        local = frame->local;
+
+        if (op_ret != 0)
+                goto out;
+
+        if (!local)
+                goto out;
+
+        if (local->loc.inode) {
+                mdc_inode_iatt_set (this, local->loc.inode, buf);
+        }
+
+        if (local->loc2.parent) {
+                mdc_inode_iatt_set (this, local->loc2.parent, postparent);
+        }
+out:
+        MDC_STACK_UNWIND (link, frame, op_ret, op_errno, inode, buf,
+                          preparent, postparent);
+        return 0;
+}
+
+
+int
+mdc_link (call_frame_t *frame, xlator_t *this,
+          loc_t *oldloc, loc_t *newloc)
+{
+        mdc_local_t  *local = NULL;
+
+        local = mdc_local_get (frame);
+
+        loc_copy (&local->loc, oldloc);
+        loc_copy (&local->loc2, newloc);
+
+        STACK_WIND (frame, mdc_link_cbk,
+                    FIRST_CHILD(this), FIRST_CHILD(this)->fops->link,
+                    oldloc, newloc);
+        return 0;
+}
+
+
+int
+mdc_create_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+                int32_t op_ret, int32_t op_errno, fd_t *fd, inode_t *inode,
+                struct iatt *buf, struct iatt *preparent, struct iatt *postparent)
+{
+        mdc_local_t *local = NULL;
+
+        local = frame->local;
+
+        if (op_ret != 0)
+                goto out;
+
+        if (!local)
+                goto out;
+
+        if (local->loc.parent) {
+                mdc_inode_iatt_set (this, local->loc.parent, postparent);
+        }
+
+        if (local->loc.inode) {
+                mdc_inode_iatt_set (this, inode, buf);
+        }
+out:
+        MDC_STACK_UNWIND (create, frame, op_ret, op_errno, fd, inode, buf,
+                          preparent, postparent);
+        return 0;
+}
+
+
+int
+mdc_create (call_frame_t *frame, xlator_t *this, loc_t *loc, int flags,
+            mode_t mode, fd_t *fd, dict_t *params)
+{
+        mdc_local_t  *local = NULL;
+
+        local = mdc_local_get (frame);
+
+        loc_copy (&local->loc, loc);
+
+        STACK_WIND (frame, mdc_create_cbk,
+                    FIRST_CHILD(this), FIRST_CHILD(this)->fops->create,
+                    loc, flags, mode, fd, params);
+        return 0;
+}
+
+
+int
+mdc_readv_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+               int32_t op_ret, int32_t op_errno,
+               struct iovec *vector, int32_t count,
+               struct iatt *stbuf, struct iobref *iobref)
+{
+        mdc_local_t  *local = NULL;
+
+        local = frame->local;
+
+        if (op_ret != 0)
+                goto out;
+
+        if (!local)
+                goto out;
+
+        mdc_inode_iatt_set (this, local->fd->inode, stbuf);
+
+out:
+        MDC_STACK_UNWIND (readv, frame, op_ret, op_errno, vector, count,
+                          stbuf, iobref);
+
+        return 0;
+}
+
+
+int
+mdc_readv (call_frame_t *frame, xlator_t *this, fd_t *fd, size_t size,
+           off_t offset)
+{
+        mdc_local_t  *local = NULL;
+
+        local = mdc_local_get (frame);
+
+        local->fd = fd_ref (fd);
+
+        STACK_WIND (frame, mdc_readv_cbk,
+                    FIRST_CHILD(this), FIRST_CHILD(this)->fops->readv,
+                    fd, size, offset);
+        return 0;
+}
+
+
+int
+mdc_writev_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+               int32_t op_ret, int32_t op_errno,
+               struct iatt *prebuf, struct iatt *postbuf)
+{
+        mdc_local_t  *local = NULL;
+
+        local = frame->local;
+
+        if (op_ret != 0)
+                goto out;
+
+        if (!local)
+                goto out;
+
+        mdc_inode_iatt_set (this, local->fd->inode, postbuf);
+
+out:
+        MDC_STACK_UNWIND (writev, frame, op_ret, op_errno, prebuf, postbuf);
+
+        return 0;
+}
+
+
+int
+mdc_writev (call_frame_t *frame, xlator_t *this, fd_t *fd, struct iovec *vector,
+            int count, off_t offset, struct iobref *iobref)
+{
+        mdc_local_t  *local = NULL;
+
+        local = mdc_local_get (frame);
+
+        local->fd = fd_ref (fd);
+
+        STACK_WIND (frame, mdc_writev_cbk,
+                    FIRST_CHILD(this), FIRST_CHILD(this)->fops->writev,
+                    fd, vector, count, offset, iobref);
+        return 0;
+}
+
+
+int
+mdc_setattr_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+                 int32_t op_ret, int32_t op_errno,
+                 struct iatt *prebuf, struct iatt *postbuf)
+{
+        mdc_local_t  *local = NULL;
+
+        local = frame->local;
+
+        if (op_ret != 0)
+                goto out;
+
+        if (!local)
+                goto out;
+
+        mdc_inode_iatt_set (this, local->loc.inode, postbuf);
+
+out:
+        MDC_STACK_UNWIND (setattr, frame, op_ret, op_errno, prebuf, postbuf);
+
+        return 0;
+}
+
+
+int
+mdc_setattr (call_frame_t *frame, xlator_t *this, loc_t *loc,
+             struct iatt *stbuf, int valid)
+{
+        mdc_local_t  *local = NULL;
+
+        local = mdc_local_get (frame);
+
+        loc_copy (&local->loc, loc);
+
+        STACK_WIND (frame, mdc_setattr_cbk,
+                    FIRST_CHILD(this), FIRST_CHILD(this)->fops->setattr,
+                    loc, stbuf, valid);
+        return 0;
+}
+
+
+int
+mdc_fsetattr_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+                  int32_t op_ret, int32_t op_errno,
+                  struct iatt *prebuf, struct iatt *postbuf)
+{
+        mdc_local_t  *local = NULL;
+
+        local = frame->local;
+
+        if (op_ret != 0)
+                goto out;
+
+        if (!local)
+                goto out;
+
+        mdc_inode_iatt_set (this, local->fd->inode, postbuf);
+
+out:
+        MDC_STACK_UNWIND (fsetattr, frame, op_ret, op_errno, prebuf, postbuf);
+
+        return 0;
+}
+
+
+int
+mdc_fsetattr (call_frame_t *frame, xlator_t *this, fd_t *fd,
+              struct iatt *stbuf, int valid)
+{
+        mdc_local_t  *local = NULL;
+
+        local = mdc_local_get (frame);
+
+        local->fd = fd_ref (fd);
+
+        STACK_WIND (frame, mdc_setattr_cbk,
+                    FIRST_CHILD(this), FIRST_CHILD(this)->fops->fsetattr,
+                    fd, stbuf, valid);
+        return 0;
+}
+
+
+
+int
+mdc_fsync_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+               int32_t op_ret, int32_t op_errno,
+               struct iatt *prebuf, struct iatt *postbuf)
+{
+        mdc_local_t  *local = NULL;
+
+        local = frame->local;
+
+        if (op_ret != 0)
+                goto out;
+
+        if (!local)
+                goto out;
+
+        mdc_inode_iatt_set (this, local->fd->inode, postbuf);
+
+out:
+        MDC_STACK_UNWIND (fsync, frame, op_ret, op_errno, prebuf, postbuf);
+
+        return 0;
+}
+
+
+int
+mdc_fsync (call_frame_t *frame, xlator_t *this, fd_t *fd, int datasync)
+{
+        mdc_local_t  *local = NULL;
+
+        local = mdc_local_get (frame);
+
+        local->fd = fd_ref (fd);
+
+        STACK_WIND (frame, mdc_fsync_cbk,
+                    FIRST_CHILD(this), FIRST_CHILD(this)->fops->fsync,
+                    fd, datasync);
         return 0;
 }
 
@@ -454,6 +1189,22 @@ fini (xlator_t *this)
 struct xlator_fops fops = {
         .lookup      = mdc_lookup,
         .stat        = mdc_stat,
+        .fstat       = mdc_fstat,
+        .truncate    = mdc_truncate,
+        .ftruncate   = mdc_ftruncate,
+        .mknod       = mdc_mknod,
+        .mkdir       = mdc_mkdir,
+        .unlink      = mdc_unlink,
+        .rmdir       = mdc_rmdir,
+        .symlink     = mdc_symlink,
+        .rename      = mdc_rename,
+        .link        = mdc_link,
+        .create      = mdc_create,
+        .readv       = mdc_readv,
+        .writev      = mdc_writev,
+        .setattr     = mdc_setattr,
+        .fsetattr    = mdc_fsetattr,
+        .fsync       = mdc_fsync,
 };
 
 

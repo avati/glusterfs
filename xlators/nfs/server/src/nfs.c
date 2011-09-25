@@ -272,8 +272,7 @@ nfs_startup_subvolume (xlator_t *nfsx, xlator_t *xl)
                 goto err;
         }
 
-        ret = nfs_inode_loc_fill (xl->itable->root, &rootloc,
-                                  NFS_RESOLVE_CREATE);
+        ret = nfs_root_loc_fill (xl->itable, &rootloc);
         if (ret == -1) {
                 gf_log (GF_NFS, GF_LOG_CRITICAL, "Failed to init root loc");
                 goto err;
