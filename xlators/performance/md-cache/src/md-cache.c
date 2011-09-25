@@ -200,6 +200,9 @@ mdc_inode_iatt_set (xlator_t *this, inode_t *inode, struct iatt *iatt)
         int              ret = -1;
         struct md_cache *mdc = NULL;
 
+        if (!iatt->ia_ctime)
+                return 0;
+
         mdc = mdc_inode_prep (this, inode);
         if (!mdc)
                 goto out;
