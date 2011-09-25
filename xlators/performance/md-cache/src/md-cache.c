@@ -97,7 +97,8 @@ mdc_local_wipe (xlator_t *this, mdc_local_t *local)
 
         loc_wipe (&local->loc2);
 
-        fd_unref (local->fd);
+        if (local->fd)
+                fd_unref (local->fd);
 
         FREE (local);
         return;
