@@ -1048,7 +1048,7 @@ mdc_writev_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
 
         local = frame->local;
 
-        if (op_ret != 0)
+        if (op_ret == -1)
                 goto out;
 
         if (!local)
