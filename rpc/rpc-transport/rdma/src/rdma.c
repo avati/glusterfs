@@ -2952,6 +2952,7 @@ rdma_do_reads (rdma_peer_t *peer, rdma_post_t *post, rdma_read_chunk_t *readch)
                 post->ctx.iobref = iobref_new ();
                 if (post->ctx.iobref == NULL) {
                         iobuf_unref (iobuf);
+                        iobuf = NULL;
                         goto out;
                 }
         }
