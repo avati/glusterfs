@@ -159,6 +159,7 @@ static struct volopt_map_entry glusterd_volopt_map[] = {
         {"transport.keepalive",                   "protocol/server",           "transport.socket.keepalive", NULL, NO_DOC, 0},
         {"server.allow-insecure",                 "protocol/server",          "rpc-auth-allow-insecure", NULL, NO_DOC, 0},
 
+        {"performance.md-cache",                 "performance/md-cache",      "!perf", "on", NO_DOC, 0},
         {"performance.write-behind",             "performance/write-behind",  "!perf", "on", NO_DOC, 0},
         {"performance.read-ahead",               "performance/read-ahead",    "!perf", "off", NO_DOC, 0},
         {"performance.io-cache",                 "performance/io-cache",      "!perf", "off", NO_DOC, 0},
@@ -166,7 +167,6 @@ static struct volopt_map_entry glusterd_volopt_map[] = {
         {VKEY_PERF_STAT_PREFETCH,                "performance/stat-prefetch", "!perf", "off", NO_DOC, 0},
         {"performance.client-io-threads",        "performance/io-threads",    "!perf", "on", NO_DOC, 0},
         {"performance.posix-acl",                "features/access-control",   "!perf", "on", NO_DOC, 0},
-        {"performance.md-cache",                 "performance/md-cache",      "!perf", "on", NO_DOC, 0},
         {VKEY_MARKER_XTIME,                      "features/marker",           "xtime", "off", NO_DOC, OPT_FLAG_FORCE},
         {VKEY_MARKER_XTIME,                      "features/marker",           "!xtime", "off", NO_DOC, OPT_FLAG_FORCE},
 
