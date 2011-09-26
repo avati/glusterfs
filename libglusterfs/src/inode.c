@@ -1183,7 +1183,7 @@ inode_table_new (size_t lru_limit, xlator_t *xl)
 
         new->lru_limit = lru_limit;
 
-        new->hashsize = 140570; /* TODO: Random Number?? */
+        new->hashsize = 1405700; /* TODO: Random Number?? */
 
         /* In case FUSE is initing the inode table. */
         if (lru_limit == 0)
