@@ -1524,6 +1524,10 @@ server_graph_builder (volgen_graph_t *graph, glusterd_volinfo_t *volinfo,
         if (ret)
                 return -1;
 
+        xl = volgen_graph_add (graph, "performance/md-cache", volname);
+        if (!xl)
+                return -1;
+
         xl = volgen_graph_add_as (graph, "debug/io-stats", path);
         if (!xl)
                 return -1;
