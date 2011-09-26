@@ -262,8 +262,23 @@ mdc_inode_mtim_get (xlator_t *this, inode_t *inode, uint64_t *mtim)
 int
 mdc_inode_xatt_set (xlator_t *this, inode_t *inode, dict_t *dict)
 {
-        int ret = 0;
+        int              ret = -1;
+        struct md_cache *mdc = NULL;
 
+        mdc = mdc_inode_prep (this, inode);
+        if (!mdc)
+                goto out;
+
+        if (!dict)
+                goto out;
+
+        if (mdc->xattr)
+                dict_unref (mdc->xattr);
+
+        mdc->xattr = dict_ref (dict);
+
+        ret = 0;
+out:
         return ret;
 }
 
@@ -271,8 +286,24 @@ mdc_inode_xatt_set (xlator_t *this, inode_t *inode, dict_t *dict)
 int
 mdc_inode_xatt_get (xlator_t *this, inode_t *inode, dict_t **dict)
 {
-        int ret = 0;
+        int              ret = -1;
+        struct md_cache *mdc = NULL;
 
+        if (inode_ctx_get (inode, this, NULL) != 0)
+                goto out;
+
+        mdc = mdc_inode_prep (this, inode);
+        if (!mdc)
+                goto out;
+
+        if (!mdc->xattr)
+                goto out;
+
+        if (dict)
+                *dict = dict_ref (mdc->xattr);
+
+        ret = 0;
+out:
         return ret;
 }
 
@@ -334,9 +365,7 @@ mdc_lookup_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
 
         if (local->loc.inode) {
                 mdc_inode_iatt_set (this, local->loc.inode, stbuf);
-/*
                 mdc_inode_xatt_set (this, local->loc.inode, dict);
-*/
         }
 out:
         MDC_STACK_UNWIND (lookup, frame, op_ret, op_errno, inode, stbuf,
@@ -398,11 +427,18 @@ mdc_lookup (call_frame_t *frame, xlator_t *this, loc_t *loc,
         MDC_STACK_UNWIND (lookup, frame, 0, 0, loc->inode, &stbuf,
                           xattr_rsp, &postparent);
 
+        if (xattr_rsp)
+                dict_unref (xattr_rsp);
+
         return 0;
 
 uncached:
         STACK_WIND (frame, mdc_lookup_cbk, FIRST_CHILD (this),
                     FIRST_CHILD (this)->fops->lookup, loc, xattr_req);
+
+        if (xattr_rsp)
+                dict_unref (xattr_rsp);
+
         return 0;
 }
 
