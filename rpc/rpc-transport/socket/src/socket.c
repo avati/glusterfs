@@ -199,6 +199,110 @@ __socket_rwv (rpc_transport_t *this, struct iovec *vector, int count,
                         if (errno == EINTR)
                                 continue;
 
+                        if (errno == EFAULT) {
+                                gf_log (this->name, GF_LOG_ERROR,
+                                        "opvector.iov_base = %p opvector.iov_len = %d opcount = %d",
+                                        opvector->iov_base, (int)opvector->iov_len, (int)opcount);
+                                if (pending_vector && pending_count) {
+                                        gf_log (this->name, GF_LOG_ERROR,
+                                                "*pending_vector->iov_base = %p *pending_vector->iov_len = %d *pending_count = %d",
+                                                (*pending_vector)->iov_base, (int)(*pending_vector)->iov_len, *pending_count);
+                                }
+                                gf_log (this->name, GF_LOG_ERROR,
+                                        "priv->incoming.record_state = %d",
+                                        priv->incoming.record_state);
+                                gf_log (this->name, GF_LOG_ERROR,
+                                        "priv->incoming.frag.fragcurrent = %p",
+                                        priv->incoming.frag.fragcurrent);
+                                gf_log (this->name, GF_LOG_ERROR,
+                                        "priv->incoming.frag.bytes_read = %d",
+                                        priv->incoming.frag.bytes_read);
+                                gf_log (this->name, GF_LOG_ERROR,
+                                        "priv->incoming.frag.remaining_size = %d",
+                                        priv->incoming.frag.remaining_size);
+                                gf_log (this->name, GF_LOG_ERROR,
+                                        "priv->incoming.frag.vector.iov_{base, len} = %p, %d",
+                                        priv->incoming.frag.vector.iov_base,
+                                        (int) priv->incoming.frag.vector.iov_len);
+                                if (priv->incoming.frag.pending_vector) {
+                                        gf_log (this->name, GF_LOG_ERROR,
+                                                "priv->incoming.frag.pending_vector->iov_{base, len} = %p, %d",
+                                                priv->incoming.frag.pending_vector->iov_base,
+                                                (int) priv->incoming.frag.pending_vector->iov_len);
+                                }
+                                gf_log (this->name, GF_LOG_ERROR,
+                                        "priv->incoming.frag.call_body.request.header_state = %d",
+                                        (int)(priv->incoming.frag.call_body.request.header_state));
+                                gf_log (this->name, GF_LOG_ERROR,
+                                        "priv->incoming.frag.call_body.request.vector_state = %d",
+                                        (int)(priv->incoming.frag.call_body.request.vector_state));
+                                gf_log (this->name, GF_LOG_ERROR,
+                                        "priv->incoming.frag.call_body.request.vector_sizer_state = %d",
+                                        (int)(priv->incoming.frag.call_body.request.vector_sizer_state));
+                                gf_log (this->name, GF_LOG_ERROR,
+                                        "priv->incoming.frag.simple_state = %d",
+                                        (int)(priv->incoming.frag.simple_state));
+                                gf_log (this->name, GF_LOG_ERROR,
+                                        "priv->incoming.frag.state = %d",
+                                        (int)(priv->incoming.frag.state));
+                                if (priv->incoming.iobuf) {
+                                        gf_log (this->name, GF_LOG_ERROR,
+                                                "priv->incoming.iobuf{ptr,page_size} = %p, %p, %d",
+                                                priv->incoming.iobuf,
+                                                iobuf_ptr (priv->incoming.iobuf),
+                                                (int)(priv->incoming.iobuf->iobuf_arena->page_size));
+                                }
+                                gf_log (this->name, GF_LOG_ERROR,
+                                        "priv->incoming.iobuf_size = %d",
+                                        (int)(priv->incoming.iobuf_size));
+                                gf_log (this->name, GF_LOG_ERROR,
+                                        "priv->incoming.vector[0..1].iov_{base,len} = {%p, %d}, {%p, %d}",
+                                        priv->incoming.vector[0].iov_base,
+                                        (int)priv->incoming.vector[0].iov_len,
+                                        priv->incoming.vector[1].iov_base,
+                                        (int)priv->incoming.vector[1].iov_len);
+                                gf_log (this->name, GF_LOG_ERROR,
+                                        "priv->incoming.count = %d",
+                                        (int)(priv->incoming.count));
+                                gf_log (this->name, GF_LOG_ERROR,
+                                        "priv->incoming.payload_vector.iov_{base,len} = {%p, %d}",
+                                        priv->incoming.payload_vector.iov_base,
+                                        (int)priv->incoming.payload_vector.iov_len);
+                                gf_log (this->name, GF_LOG_ERROR,
+                                        "priv->incoming.iobref = %p",
+                                        priv->incoming.iobref);
+                                if (priv->incoming.request_info) {
+                                        gf_log (this->name, GF_LOG_ERROR,
+                                                "priv->incoming.request_info->{xid,prognum,progver,procnum,rpc_req} = {%d, %d, %d, %d, %p",
+                                                priv->incoming.request_info->xid,
+                                                priv->incoming.request_info->prognum,
+                                                priv->incoming.request_info->progver,
+                                                priv->incoming.request_info->procnum,
+                                                priv->incoming.request_info->rpc_req);
+                                }
+                                if (priv->incoming.pending_vector) {
+                                        gf_log (this->name, GF_LOG_ERROR,
+                                                "priv->incoming.pending_vector->iov_{base,len} = {%p, %d}",
+                                                priv->incoming.pending_vector->iov_base,
+                                                (int)priv->incoming.pending_vector->iov_len);
+                                        gf_log (this->name, GF_LOG_ERROR,
+                                                "priv->incoming.pending_count = %d",
+                                                priv->incoming.pending_count);
+                                }
+                                gf_log (this->name, GF_LOG_ERROR,
+                                        "priv->incoming.fraghdr = %d",
+                                        priv->incoming.fraghdr);
+                                gf_log (this->name, GF_LOG_ERROR,
+                                        "priv->incoming.complete_record = %d",
+                                        (int)(priv->incoming.complete_record));
+                                gf_log (this->name, GF_LOG_ERROR,
+                                        "priv->incoming.msg_type = %d",
+                                        (int)(priv->incoming.msg_type));
+                                gf_log (this->name, GF_LOG_ERROR,
+                                        "priv->incoming.total_bytes_read = %d",
+                                        (int)(priv->incoming.total_bytes_read));
+                        }
+
                         gf_log (this->name, GF_LOG_WARNING,
                                 "%s failed (%s)", write ? "writev" : "readv",
                                 strerror (errno));
