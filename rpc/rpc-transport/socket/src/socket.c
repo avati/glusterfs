@@ -251,6 +251,9 @@ __socket_rwv (rpc_transport_t *this, struct iovec *vector, int count,
                                                 priv->incoming.iobuf,
                                                 iobuf_ptr (priv->incoming.iobuf),
                                                 (int)(priv->incoming.iobuf->iobuf_arena->page_size));
+                                        gf_log (this->name, GF_LOG_ERROR,
+                                                "priv->incoming.iobuf->ref = %d",
+                                                priv->incoming.iobuf->ref);
                                 }
                                 gf_log (this->name, GF_LOG_ERROR,
                                         "priv->incoming.iobuf_size = %d",
