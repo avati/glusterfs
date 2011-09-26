@@ -4306,8 +4306,6 @@ nfs3_fh_resolve_inode_lookup_cbk (call_frame_t *frame, void *cookie,
         cs->resolve_ret = op_ret;
         cs->resolve_errno = op_errno;
 
-	memcpy (&cs->stbuf, buf, sizeof(*buf));
-	memcpy (&cs->postparent, buf, sizeof(*postparent));
         if (op_ret == -1) {
                 gf_log (GF_NFS3, GF_LOG_TRACE, "Lookup failed: %s: %s",
                         cs->resolvedloc.path, strerror (op_errno));
@@ -4315,6 +4313,8 @@ nfs3_fh_resolve_inode_lookup_cbk (call_frame_t *frame, void *cookie,
                 goto err;
         }
 
+	memcpy (&cs->stbuf, buf, sizeof(*buf));
+	memcpy (&cs->postparent, buf, sizeof(*postparent));
         linked_inode = inode_link (inode, cs->resolvedloc.parent,
                                    cs->resolvedloc.name, buf);
         if (linked_inode) {
