@@ -319,6 +319,18 @@ checkfn (dict_t *this, char *key, data_t *value, void *data)
         if (strcmp (key, "gfid-req") == 0)
                 return;
 
+        if (strcmp (key, "system.posix_acl_access") == 0)
+                return;
+
+        if (strcmp (key, "system.posix_acl_default") == 0)
+                return;
+
+        if (strncmp (key, "trusted.glusterfs.dht", 21) == 0)
+                return;
+
+        if (strcmp (key, GLUSTERFS_OPEN_FD_COUNT) == 0)
+                return;
+
         pair->ret = 0;
 }
 
@@ -333,6 +345,8 @@ mdc_xattr_satisfied (xlator_t *this, dict_t *req, dict_t *rsp)
                 .ret = 1,
                 .rsp = rsp,
         };
+
+        return 1;
 
         dict_foreach (req, checkfn, &pair);
 
