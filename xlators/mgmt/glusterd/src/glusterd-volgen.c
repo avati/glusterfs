@@ -164,7 +164,7 @@ static struct volopt_map_entry glusterd_volopt_map[] = {
         {"performance.io-cache",                 "performance/io-cache",      "!perf", "off", NO_DOC, 0},
         {"performance.quick-read",               "performance/quick-read",    "!perf", "off", NO_DOC, 0},
         {VKEY_PERF_STAT_PREFETCH,                "performance/stat-prefetch", "!perf", "off", NO_DOC, 0},
-        {"performance.client-io-threads",        "performance/io-threads",    "!perf", "off", NO_DOC, 0},
+        {"performance.client-io-threads",        "performance/io-threads",    "!perf", "on", NO_DOC, 0},
         {"performance.posix-acl",                "features/access-control",   "!perf", "on", NO_DOC, 0},
         {"performance.md-cache",                 "performance/md-cache",      "!perf", "on", NO_DOC, 0},
         {VKEY_MARKER_XTIME,                      "features/marker",           "xtime", "off", NO_DOC, OPT_FLAG_FORCE},
