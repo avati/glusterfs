@@ -58,6 +58,7 @@ struct md_cache {
         uint64_t      md_size;
         uint64_t      md_blocks;
         dict_t       *xattr;
+        char         *linkname;
 };
 
 
@@ -65,6 +66,8 @@ struct mdc_local {
         loc_t     loc;
         loc_t     loc2;
         fd_t     *fd;
+        char     *linkname;
+        dict_t   *xattr;
 };
 
 
@@ -100,6 +103,12 @@ mdc_local_wipe (xlator_t *this, mdc_local_t *local)
         if (local->fd)
                 fd_unref (local->fd);
 
+        if (local->linkname)
+                FREE (local->linkname);
+
+        if (local->xattr)
+                dict_unref (local->xattr);
+
         FREE (local);
         return;
 }
@@ -117,6 +126,12 @@ mdc_inode_wipe (xlator_t *this, inode_t *inode)
                 goto out;
 
         mdc = (void *) (long) mdc_int;
+
+        if (mdc->xattr)
+                dict_unref (mdc->xattr);
+
+        if (mdc->linkname)
+                FREE (mdc->linkname);
 
         FREE (mdc);
 
@@ -284,6 +299,32 @@ out:
 
 
 int
+mdc_inode_xatt_update (xlator_t *this, inode_t *inode, dict_t *dict)
+{
+        int              ret = -1;
+        struct md_cache *mdc = NULL;
+
+        mdc = mdc_inode_prep (this, inode);
+        if (!mdc)
+                goto out;
+
+        if (!dict)
+                goto out;
+
+        if (!mdc->xattr)
+                mdc->xattr = dict_ref (dict);
+        else
+                dict_copy (dict, mdc->xattr);
+
+        mdc->xattr = dict_ref (dict);
+
+        ret = 0;
+out:
+        return ret;
+}
+
+
+int
 mdc_inode_xatt_get (xlator_t *this, inode_t *inode, dict_t **dict)
 {
         int              ret = -1;
@@ -432,12 +473,13 @@ mdc_lookup (call_frame_t *frame, xlator_t *this, loc_t *loc,
         if (xattr_req) {
                 ret = mdc_inode_xatt_get (this, loc->inode, &xattr_rsp);
                 if (ret != 0)
-                        goto uncached;
+                        goto cached;
 
                 if (!mdc_xattr_satisfied (this, xattr_req, xattr_rsp))
                         goto uncached;
         }
 
+cached:
         MDC_STACK_UNWIND (lookup, frame, 0, 0, loc->inode, &stbuf,
                           xattr_rsp, &postparent);
 
@@ -662,6 +704,7 @@ mdc_mknod_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
 
         if (local->loc.inode) {
                 mdc_inode_iatt_set (this, local->loc.inode, buf);
+                mdc_inode_xatt_set (this, local->loc.inode, local->xattr);
         }
 out:
         MDC_STACK_UNWIND (mknod, frame, op_ret, op_errno, inode, buf,
@@ -679,6 +722,7 @@ mdc_mknod (call_frame_t *frame, xlator_t *this, loc_t *loc,
         local = mdc_local_get (frame);
 
         loc_copy (&local->loc, loc);
+        local->xattr = dict_ref (params);
 
         STACK_WIND (frame, mdc_mknod_cbk,
                     FIRST_CHILD(this), FIRST_CHILD(this)->fops->mknod,
@@ -708,6 +752,7 @@ mdc_mkdir_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
 
         if (local->loc.inode) {
                 mdc_inode_iatt_set (this, local->loc.inode, buf);
+                mdc_inode_xatt_set (this, local->loc.inode, local->xattr);
         }
 out:
         MDC_STACK_UNWIND (mkdir, frame, op_ret, op_errno, inode, buf,
@@ -725,6 +770,7 @@ mdc_mkdir (call_frame_t *frame, xlator_t *this, loc_t *loc,
         local = mdc_local_get (frame);
 
         loc_copy (&local->loc, loc);
+        local->xattr = dict_ref (params);
 
         STACK_WIND (frame, mdc_mkdir_cbk,
                     FIRST_CHILD(this), FIRST_CHILD(this)->fops->mkdir,
@@ -858,6 +904,8 @@ mdc_symlink (call_frame_t *frame, xlator_t *this, const char *linkname,
 
         loc_copy (&local->loc, loc);
 
+        local->linkname = strdup (linkname);
+
         STACK_WIND (frame, mdc_symlink_cbk,
                     FIRST_CHILD(this), FIRST_CHILD(this)->fops->symlink,
                     linkname, loc, params);
@@ -985,6 +1033,7 @@ mdc_create_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
 
         if (local->loc.inode) {
                 mdc_inode_iatt_set (this, inode, buf);
+                mdc_inode_xatt_set (this, local->loc.inode, local->xattr);
         }
 out:
         MDC_STACK_UNWIND (create, frame, op_ret, op_errno, fd, inode, buf,
@@ -1002,6 +1051,7 @@ mdc_create (call_frame_t *frame, xlator_t *this, loc_t *loc, int flags,
         local = mdc_local_get (frame);
 
         loc_copy (&local->loc, loc);
+        local->xattr = dict_ref (params);
 
         STACK_WIND (frame, mdc_create_cbk,
                     FIRST_CHILD(this), FIRST_CHILD(this)->fops->create,
@@ -1218,6 +1268,47 @@ mdc_fsync (call_frame_t *frame, xlator_t *this, fd_t *fd, int datasync)
 
 
 int
+mdc_setxattr_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+                  int32_t op_ret, int32_t op_errno)
+{
+        mdc_local_t  *local = NULL;
+
+        local = frame->local;
+
+        if (op_ret != 0)
+                goto out;
+
+        if (!local)
+                goto out;
+
+        mdc_inode_xatt_update (this, local->loc.inode, local->xattr);
+
+out:
+        MDC_STACK_UNWIND (setxattr, frame, op_ret, op_errno);
+
+        return 0;
+}
+
+
+int
+mdc_setxattr (call_frame_t *frame, xlator_t *this, loc_t *loc,
+              dict_t *xattr, int flags)
+{
+        mdc_local_t  *local = NULL;
+
+        local = mdc_local_get (frame);
+
+        loc_copy (&local->loc, loc);
+        local->xattr = dict_ref (xattr);
+
+        STACK_WIND (frame, mdc_setxattr_cbk,
+                    FIRST_CHILD(this), FIRST_CHILD(this)->fops->setxattr,
+                    loc, xattr, flags);
+        return 0;
+}
+
+
+int
 mdc_forget (xlator_t *this, inode_t *inode)
 {
         mdc_inode_wipe (this, inode);
@@ -1259,6 +1350,7 @@ struct xlator_fops fops = {
         .setattr     = mdc_setattr,
         .fsetattr    = mdc_fsetattr,
         .fsync       = mdc_fsync,
+        .setxattr    = mdc_setxattr,
 };
 
 
