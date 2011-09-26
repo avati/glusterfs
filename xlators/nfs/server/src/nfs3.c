@@ -874,16 +874,16 @@ nfs3svc_setattr_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
 
         /* If the first stat was got from the guarded setattr callback, then
          * we'll need to use that stat instead of the preop returned here.
-         */
         if (cs->preparent.ia_ino != 0)
                 prebuf = &cs->preparent;
         else {
+         */
                 prebuf = preop;
                 /* Store the current preop in case we need to send a truncate,
                  * in which case the preop to be returned will be this one.
                  */
                 cs->preparent = *preop;
-        }
+       // }
 
         /* Only truncate if the size is not already same as the requested
          * truncation and also only if this is not a directory.
@@ -970,14 +970,9 @@ nfs3_setattr_resume (void *carg)
         cs = (nfs3_call_state_t *)carg;
         nfs3_check_fh_resolve_status (cs, stat, nfs3err);
         nfs_request_user_init (&nfu, cs->req);
-        /* If no ctime check is required, head straight to setting the attrs. */
-        if (cs->sattrguardcheck)
-                ret = nfs_stat (cs->nfsx, cs->vol, &nfu, &cs->resolvedloc,
-                                nfs3svc_setattr_stat_cbk, cs);
-        else
-                ret = nfs_setattr (cs->nfsx, cs->vol, &nfu, &cs->resolvedloc,
-                                   &cs->stbuf, cs->setattr_valid,
-                                   nfs3svc_setattr_cbk, cs);
+        ret = nfs_setattr (cs->nfsx, cs->vol, &nfu, &cs->resolvedloc,
+                           &cs->stbuf, cs->setattr_valid,
+                           nfs3svc_setattr_cbk, cs);
 
         if (ret < 0)
                 stat = nfs3_errno_to_nfsstat3 (-ret);
