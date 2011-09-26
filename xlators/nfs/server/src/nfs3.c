@@ -4821,8 +4821,7 @@ nfs3_commit_reply (rpcsvc_request_t *req, nfsstat3 stat, uint64_t wverf,
 
 int32_t
 nfs3svc_commit_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
-                    int32_t op_ret, int32_t op_errno, struct iatt *prebuf,
-                    struct iatt *postbuf)
+                    int32_t op_ret, int32_t op_errno)
 {
         nfsstat3                stat = NFS3ERR_SERVERFAULT;
         nfs3_call_state_t       *cs = NULL;
@@ -4837,7 +4836,7 @@ nfs3svc_commit_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
         nfs3 = rpcsvc_request_program_private (cs->req);
         nfs3_log_commit_res (rpcsvc_request_xid (cs->req), stat, op_errno,
                              nfs3->serverstart);
-        nfs3_commit_reply (cs->req, stat, nfs3->serverstart, prebuf, postbuf);
+        nfs3_commit_reply (cs->req, stat, nfs3->serverstart, NULL, NULL);
         nfs3_call_state_wipe (cs);
 
         return 0;
@@ -4864,7 +4863,7 @@ nfs3_commit_resume (void *carg)
         }
 
         nfs_request_user_init (&nfu, cs->req);
-        ret = nfs_fsync (cs->nfsx, cs->vol, &nfu, cs->fd, 0,
+        ret = nfs_flush (cs->nfsx, cs->vol, &nfu, cs->fd,
                          nfs3svc_commit_cbk, cs);
         if (ret < 0)
                 stat = nfs3_errno_to_nfsstat3 (-ret);
