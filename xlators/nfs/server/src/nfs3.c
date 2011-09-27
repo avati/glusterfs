@@ -2356,16 +2356,30 @@ nfs3_create_common (nfs3_call_state_t *cs)
         int                     ret = -EFAULT;
         int                     flags = 0;
         nfs_user_t              nfu = {0, };
+        uid_t                   uid = 0;
+        gid_t                   gid = 0;
 
         if (!cs)
                 return ret;
 
-        if (cs->createmode == UNCHECKED)
-                flags = O_RDWR;
-        else if (cs->createmode == GUARDED)
+        if (cs->createmode == GUARDED)
                 flags = (O_RDWR | O_EXCL);
+        else
+                flags = O_RDWR;
 
-        nfs_request_user_init (&nfu, cs->req);
+        if (gf_attr_uid_set (cs->setattr_valid)) {
+                uid = cs->stbuf.ia_uid;
+                cs->setattr_valid &= ~GF_SET_ATTR_UID;
+        } else
+                uid = rpcsvc_request_uid (cs->req);
+
+        if (gf_attr_gid_set (cs->setattr_valid)) {
+                gid = cs->stbuf.ia_gid;
+                cs->setattr_valid &= ~GF_SET_ATTR_GID;
+        } else
+                gid = rpcsvc_request_gid (cs->req);
+
+        nfs_request_primary_user_init (&nfu, cs->req, uid, gid);
         /* We can avoid sending the setattr call later if only the mode is
          * required to be set. This is possible because the create fop allows
          * us to specify a mode arg.
@@ -2459,16 +2473,7 @@ nfs3_create_exclusive (nfs3_call_state_t *cs)
                 goto nfs3err;
         }
 
-        if (cs->setattr_valid & GF_SET_ATTR_MODE) {
-                cs->setattr_valid &= ~GF_SET_ATTR_MODE;
-                ret = nfs_create (cs->nfsx, cs->vol, &nfu, &cs->resolvedloc,
-                                  O_RDWR, cs->mode, nfs3svc_create_cbk, cs);
-        } else
-                ret = nfs_create (cs->nfsx, cs->vol, &nfu, &cs->resolvedloc,
-                                  O_RDWR,
-                                  NFS_DEFAULT_CREATE_MODE, nfs3svc_create_cbk,
-                                  cs);
-
+        ret = nfs3_create_common (cs);
 nfs3err:
         return ret;
 }

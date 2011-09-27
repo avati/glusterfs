@@ -453,6 +453,23 @@ nfs_request_user_init (nfs_user_t *nfu, rpcsvc_request_t *req)
         return;
 }
 
+void
+nfs_request_primary_user_init (nfs_user_t *nfu, rpcsvc_request_t *req,
+                               uid_t uid, gid_t gid)
+{
+        gid_t           *gidarr = NULL;
+        int             gids = 0;
+
+        if ((!req) || (!nfu))
+                return;
+
+        gidarr = rpcsvc_auth_unix_auxgids (req, &gids);
+        nfs_user_create (nfu, uid, gid, gidarr, gids);
+
+        return;
+}
+
+
 int32_t
 mem_acct_init (xlator_t *this)
 {
