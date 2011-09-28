@@ -1913,6 +1913,7 @@ __posix_pwritev (int fd, struct iovec *vector, int count, off_t offset)
         int             idx = 0;
         int             retval = 0;
         off_t           internal_off = 0;
+        int             flags = 0;
 
         if (!vector)
                 return -EFAULT;
@@ -1922,8 +1923,17 @@ __posix_pwritev (int fd, struct iovec *vector, int count, off_t offset)
                 retval = pwrite (fd, vector[idx].iov_base, vector[idx].iov_len,
                                  internal_off);
                 if (retval == -1) {
-                        op_ret = -errno;
-                        goto err;
+                        flags = fcntl (fd, F_GETFL);
+                        gf_log (THIS->name, GF_LOG_ERROR,
+                                "pwrite (fd=%d (flags=%d), buf=%p, size=%llu, off=%llx) => -1 (%s)",
+                                fd, flags, vector[idx].iov_base, (unsigned long long) vector[idx].iov_len,
+                                (unsigned long long) internal_off, strerror (errno));
+                        if (errno != EINVAL && errno != EFBIG) {
+                                op_ret = -errno;
+                                goto err;
+                        } else {
+                                retval = vector[idx].iov_len;
+                        }
                 }
                 op_ret += retval;
                 internal_off += retval;
