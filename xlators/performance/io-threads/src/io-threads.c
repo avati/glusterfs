@@ -216,6 +216,7 @@ iot_schedule (call_frame_t *frame, xlator_t *this, call_stub_t *stub)
         case GF_FOP_STATFS:
         case GF_FOP_READDIR:
         case GF_FOP_READDIRP:
+        case GF_FOP_READ:
                 pri = IOT_PRI_HI;
                 break;
 
@@ -243,7 +244,6 @@ iot_schedule (call_frame_t *frame, xlator_t *this, call_stub_t *stub)
                 pri = IOT_PRI_NORMAL;
                 break;
 
-        case GF_FOP_READ:
         case GF_FOP_WRITE:
         case GF_FOP_FSYNC:
         case GF_FOP_TRUNCATE:
