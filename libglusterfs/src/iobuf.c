@@ -867,12 +867,13 @@ iobuf_arena_info_dump (struct iobuf_arena *iobuf_arena, const char *key_prefix)
         gf_proc_dump_write(key, "%d", iobuf_arena->active_cnt);
         gf_proc_dump_build_key(key, key_prefix, "passive_cnt");
         gf_proc_dump_write(key, "%d", iobuf_arena->passive_cnt);
+/*
         list_for_each_entry (trav, &iobuf_arena->active.list, list) {
                 gf_proc_dump_build_key(key, key_prefix,"active_iobuf.%d", i++);
                 gf_proc_dump_add_section(key);
                 iobuf_info_dump(trav, key);
         }
-
+*/
 out:
         return;
 }
@@ -915,7 +916,6 @@ iobuf_stats_dump (struct iobuf_pool *iobuf_pool)
                 }
 
         }
-
         pthread_mutex_unlock(&iobuf_pool->mutex);
 
 out:

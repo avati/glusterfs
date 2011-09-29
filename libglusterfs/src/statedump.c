@@ -61,20 +61,46 @@ gf_proc_dump_unlock (void)
 }
 
 
+int
+gf_proc_dump_hdr ()
+{
+        char header[256];
+        struct tm *tm = NULL;
+        struct timeval tv;
+        int ret;
+
+        ret = gettimeofday (&tv, NULL);
+        if (-1 == ret)
+                goto out;
+
+        tm = localtime (&tv.tv_sec);
+        strftime (header, 256,
+                  "\n\n===================== %Y-%m-%d %H:%M:%S ===========================\n\n", tm);
+
+        write (gf_dump_fd, header, strlen (header));
+out:
+        return 0;
+}
+
+
 static int
 gf_proc_dump_open (void)
 {
         char path[256];
         int  dump_fd = -1;
 
+
         memset (path, 0, sizeof (path));
         snprintf (path, sizeof (path), "%s.%d", GF_DUMP_LOGFILE_ROOT, getpid ());
 
-        dump_fd = open (path, O_CREAT|O_RDWR|O_TRUNC|O_APPEND, 0600);
+        dump_fd = open (path, O_CREAT|O_RDWR|O_APPEND, 0600);
         if (dump_fd < 0)
                 return -1;
 
         gf_dump_fd = dump_fd;
+
+        gf_proc_dump_hdr ();
+
         return 0;
 }
 

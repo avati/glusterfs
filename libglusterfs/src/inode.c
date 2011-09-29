@@ -1630,9 +1630,10 @@ inode_table_dump (inode_table_t *itable, char *prefix)
         gf_proc_dump_build_key(key, prefix, "purge_size");
         gf_proc_dump_write(key, "%d", itable->purge_size);
 
+/*
         INODE_DUMP_LIST(&itable->active, key, prefix, "active");
         INODE_DUMP_LIST(&itable->lru, key, prefix, "lru");
         INODE_DUMP_LIST(&itable->purge, key, prefix, "purge");
-
+*/
         pthread_mutex_unlock(&itable->lock);
 }
