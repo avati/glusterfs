@@ -3860,6 +3860,14 @@ init (xlator_t *this)
                 goto out;
         }
 
+        op_ret = posix_aio_init (this);
+        if (op_ret == -1) {
+                gf_log (this->name, GF_LOG_ERROR,
+                        "Posix AIO init failed");
+                ret = -1;
+                goto out;
+        }
+
         pthread_mutex_init (&_private->janitor_lock, NULL);
         pthread_cond_init (&_private->janitor_cond, NULL);
         INIT_LIST_HEAD (&_private->janitor_fds);

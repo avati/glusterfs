@@ -54,6 +54,11 @@
 #include "posix-mem-types.h"
 #include "posix-handle.h"
 
+#ifdef HAVE_LIBAIO
+#include <libaio.h>
+#include "posix-aio.h"
+#endif
+
 /**
  * posix_fd - internal structure common to file and directory fd's
  */
@@ -116,6 +121,11 @@ struct posix_private {
         char *          trash_path;
 
         struct stat     handledir;
+
+#ifdef HAVE_LIBAIO
+        io_context_t    ctxp;
+        pthread_t       aiothread;
+#endif
 };
 
 #define POSIX_BASE_PATH(this) (((struct posix_private *)this->private)->base_path)
