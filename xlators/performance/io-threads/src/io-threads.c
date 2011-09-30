@@ -205,6 +205,11 @@ iot_schedule (call_frame_t *frame, xlator_t *this, call_stub_t *stub)
                 goto out;
         }
 
+        if (1) {
+                pri = IOT_PRI_HI;
+                goto out;
+        }
+
         switch (stub->fop) {
         case GF_FOP_OPEN:
         case GF_FOP_STAT:
@@ -2287,7 +2292,7 @@ __iot_workers_scale (iot_conf_t *conf)
                 ret = pthread_create (&thread, &conf->w_attr, iot_worker, conf);
                 if (ret == 0) {
                         conf->curr_count++;
-                        gf_log (conf->this->name, GF_LOG_DEBUG,
+                        gf_log (conf->this->name, GF_LOG_INFO,
                                 "scaled threads to %d (queue_size=%d/%d)",
                                 conf->curr_count, conf->queue_size, scale);
                 } else {
@@ -2528,41 +2533,41 @@ struct volume_options options[] = {
 	  .type = GF_OPTION_TYPE_INT,
 	  .min  = IOT_MIN_THREADS,
 	  .max  = IOT_MAX_THREADS,
-          .default_value = "64",
+          .default_value = "16",
           .description = "Number of threads in IO threads translator which "
                          "perform concurrent IO operations"
 
 	},
 	{ .key  = {"high-prio-threads"},
 	  .type = GF_OPTION_TYPE_INT,
-	  .min  = 0,
+	  .min  = 1,
 	  .max  = IOT_MAX_THREADS,
-          .default_value = "32",
+          .default_value = "16",
           .description = "Max number of threads in IO threads translator which "
                          "perform high priority IO operations at a given time"
 
 	},
 	{ .key  = {"normal-prio-threads"},
 	  .type = GF_OPTION_TYPE_INT,
-	  .min  = 0,
+	  .min  = 1,
 	  .max  = IOT_MAX_THREADS,
-          .default_value = "32",
+          .default_value = "16",
           .description = "Max number of threads in IO threads translator which "
                          "perform normal priority IO operations at a given time"
 
 	},
 	{ .key  = {"low-prio-threads"},
 	  .type = GF_OPTION_TYPE_INT,
-	  .min  = 0,
+	  .min  = 1,
 	  .max  = IOT_MAX_THREADS,
-          .default_value = "32",
+          .default_value = "16",
           .description = "Max number of threads in IO threads translator which "
                          "perform low priority IO operations at a given time"
 
 	},
 	{ .key  = {"least-prio-threads"},
 	  .type = GF_OPTION_TYPE_INT,
-	  .min  = 0,
+	  .min  = 1,
 	  .max  = IOT_MAX_THREADS,
           .default_value = "1",
           .description = "Max number of threads in IO threads translator which "
