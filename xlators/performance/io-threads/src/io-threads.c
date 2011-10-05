@@ -205,10 +205,6 @@ iot_schedule (call_frame_t *frame, xlator_t *this, call_stub_t *stub)
                 goto out;
         }
 
-        if (1) {
-                pri = IOT_PRI_HI;
-                goto out;
-        }
 
         switch (stub->fop) {
         case GF_FOP_OPEN:
@@ -2533,7 +2529,7 @@ struct volume_options options[] = {
 	  .type = GF_OPTION_TYPE_INT,
 	  .min  = IOT_MIN_THREADS,
 	  .max  = IOT_MAX_THREADS,
-          .default_value = "16",
+          .default_value = "24",
           .description = "Number of threads in IO threads translator which "
                          "perform concurrent IO operations"
 
@@ -2542,7 +2538,7 @@ struct volume_options options[] = {
 	  .type = GF_OPTION_TYPE_INT,
 	  .min  = 1,
 	  .max  = IOT_MAX_THREADS,
-          .default_value = "16",
+          .default_value = "8",
           .description = "Max number of threads in IO threads translator which "
                          "perform high priority IO operations at a given time"
 
@@ -2551,7 +2547,7 @@ struct volume_options options[] = {
 	  .type = GF_OPTION_TYPE_INT,
 	  .min  = 1,
 	  .max  = IOT_MAX_THREADS,
-          .default_value = "16",
+          .default_value = "8",
           .description = "Max number of threads in IO threads translator which "
                          "perform normal priority IO operations at a given time"
 
@@ -2560,7 +2556,7 @@ struct volume_options options[] = {
 	  .type = GF_OPTION_TYPE_INT,
 	  .min  = 1,
 	  .max  = IOT_MAX_THREADS,
-          .default_value = "16",
+          .default_value = "8",
           .description = "Max number of threads in IO threads translator which "
                          "perform low priority IO operations at a given time"
 

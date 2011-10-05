@@ -46,7 +46,7 @@ struct iot_conf;
 #define IOT_DEFAULT_IDLE                120     /* In secs. */
 
 #define IOT_MIN_THREADS         1
-#define IOT_MAX_THREADS         16
+#define IOT_MAX_THREADS         24
 
 
 #define IOT_THREAD_STACK_SIZE   ((size_t)(1024*1024))
