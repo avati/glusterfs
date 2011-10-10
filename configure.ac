@@ -15,7 +15,7 @@ dnl
 dnl You should have received a copy of the GNU General Public License
 dnl along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-AC_INIT([glusterfs],[3.3iops15],[gluster-users@gluster.org])
+AC_INIT([glusterfs],[3.3iops16],[gluster-users@gluster.org])
 
 AM_INIT_AUTOMAKE
 

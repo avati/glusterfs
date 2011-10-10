@@ -40,6 +40,7 @@ struct posix_aio_cb {
         int             fd;
         int             op;
         off_t           offset;
+        size_t          size;
 };
 
 
@@ -230,11 +231,30 @@ posix_aio_writev_complete (struct posix_aio_cb *paiocb, int res, int res2)
         _fd = paiocb->fd;
 
         if (res < 0) {
+                int flags;
+                off_t offset;
+                size_t size;
+
+                offset = paiocb->offset;
+                size = paiocb->size;
+                flags = fcntl (_fd, F_GETFL);
+                op_errno = -res;
+
+                gf_log (THIS->name, GF_LOG_ERROR,
+                        "pwrite (fd=%d (flags=%d), off=%llx) => -1 (%s)",
+                        _fd, flags, (unsigned long long) offset,
+                        strerror (op_errno));
+
+                if (op_errno == EINVAL || op_errno == EFBIG) {
+                        op_ret = size;
+                        goto postop;
+                }
+
                 op_ret = -1;
                 op_errno = -res;
                 goto out;
         }
-
+postop:
         ret = posix_fdstat (this, _fd, &postbuf);
 
         op_ret = res;
@@ -298,6 +318,7 @@ posix_aio_writev (call_frame_t *frame, xlator_t *this, fd_t *fd,
 
         paiocb->frame = frame;
         paiocb->offset = offset;
+        paiocb->size = iov_length (iov, count);
         paiocb->fd = _fd;
         paiocb->op = GF_FOP_WRITE;
 
