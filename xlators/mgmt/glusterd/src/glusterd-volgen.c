@@ -1466,15 +1466,15 @@ server_graph_builder (volgen_graph_t *graph, glusterd_volinfo_t *volinfo,
         if (ret)
                 return -1;
 
+        xl = volgen_graph_add (graph, "performance/io-threads", volname);
+        if (!xl)
+                return -1;
+
         xl = volgen_graph_add (graph, "features/access-control", volname);
         if (!xl)
                 return -1;
 
         xl = volgen_graph_add (graph, "features/locks", volname);
-        if (!xl)
-                return -1;
-
-        xl = volgen_graph_add (graph, "performance/io-threads", volname);
         if (!xl)
                 return -1;
 
