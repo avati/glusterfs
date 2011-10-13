@@ -38,25 +38,44 @@ int iot_workers_scale (iot_conf_t *conf);
 int __iot_workers_scale (iot_conf_t *conf);
 struct volume_options options[];
 
+
 call_stub_t *
 __iot_dequeue (iot_conf_t *conf, int *pri)
 {
         call_stub_t  *stub = NULL;
         int           i = 0;
+        int           min_i = -1;
+        int           max_i = -1;
+        int           idx = -1;
 
         *pri = -1;
+
         for (i = 0; i < IOT_PRI_MAX; i++) {
-                if (list_empty (&conf->reqs[i]) ||
-                   (conf->ac_iot_count[i] >= conf->ac_iot_limit[i]))
+                if (list_empty (&conf->reqs[i]))
                         continue;
-                stub = list_entry (conf->reqs[i].next, call_stub_t, list);
-                conf->ac_iot_count[i]++;
-                *pri = i;
-                break;
+
+                if (conf->ac_iot_count[i] < conf->ac_iot_min[i]) {
+                        min_i = i;
+                        break;
+                }
+
+                if (conf->ac_iot_count[i] < conf->ac_iot_max[i]) {
+                        if (max_i == -1)
+                                max_i = i;
+                }
         }
 
-        if (!stub)
+        if (min_i != -1)
+                idx = min_i;
+        else
+                idx = max_i;
+
+        if (idx == -1)
                 return NULL;
+
+        stub = list_entry (conf->reqs[idx].next, call_stub_t, list);
+        conf->ac_iot_count[idx]++;
+        *pri = idx;
 
         conf->queue_size--;
         list_del_init (&stub->list);
@@ -216,11 +235,14 @@ iot_schedule (call_frame_t *frame, xlator_t *this, call_stub_t *stub)
         case GF_FOP_OPENDIR:
         case GF_FOP_STATFS:
         case GF_FOP_READDIR:
-        case GF_FOP_READDIRP:
                 pri = IOT_PRI_HI;
                 break;
 
         case GF_FOP_READ:
+        case GF_FOP_WRITE:
+                pri = IOT_PRI_NORMAL;
+                break;
+
         case GF_FOP_CREATE:
         case GF_FOP_FLUSH:
         case GF_FOP_LK:
@@ -242,10 +264,7 @@ iot_schedule (call_frame_t *frame, xlator_t *this, call_stub_t *stub)
         case GF_FOP_FGETXATTR:
         case GF_FOP_FSETXATTR:
         case GF_FOP_REMOVEXATTR:
-                pri = IOT_PRI_NORMAL;
-                break;
-
-        case GF_FOP_WRITE:
+        case GF_FOP_READDIRP:
         case GF_FOP_FSYNC:
         case GF_FOP_TRUNCATE:
         case GF_FOP_FTRUNCATE:
@@ -2368,18 +2387,32 @@ reconfigure (xlator_t *this, dict_t *options)
 
         GF_OPTION_RECONF ("thread-count", conf->max_count, options, int32, out);
 
-        GF_OPTION_RECONF ("high-prio-threads",
-                          conf->ac_iot_limit[IOT_PRI_HI], options, int32, out);
+        GF_OPTION_RECONF ("prio-high-max-threads",
+                          conf->ac_iot_max[IOT_PRI_HI], options, int32, out);
 
-        GF_OPTION_RECONF ("normal-prio-threads",
-                          conf->ac_iot_limit[IOT_PRI_NORMAL], options, int32,
+        GF_OPTION_RECONF ("prio-normal-max-threads",
+                          conf->ac_iot_max[IOT_PRI_NORMAL], options, int32,
                           out);
 
-        GF_OPTION_RECONF ("low-prio-threads",
-                          conf->ac_iot_limit[IOT_PRI_LO], options, int32, out);
+        GF_OPTION_RECONF ("prio-low-max-threads",
+                          conf->ac_iot_max[IOT_PRI_LO], options, int32, out);
 
-        GF_OPTION_RECONF ("least-prio-threads",
-                          conf->ac_iot_limit[IOT_PRI_LEAST], options, int32,
+        GF_OPTION_RECONF ("prio-least-max-threads",
+                          conf->ac_iot_max[IOT_PRI_LEAST], options, int32,
+                          out);
+
+        GF_OPTION_RECONF ("prio-high-min-threads",
+                          conf->ac_iot_min[IOT_PRI_HI], options, int32, out);
+
+        GF_OPTION_RECONF ("prio-normal-min-threads",
+                          conf->ac_iot_min[IOT_PRI_NORMAL], options, int32,
+                          out);
+
+        GF_OPTION_RECONF ("prio-low-min-threads",
+                          conf->ac_iot_min[IOT_PRI_LO], options, int32, out);
+
+        GF_OPTION_RECONF ("prio-least-min-threads",
+                          conf->ac_iot_min[IOT_PRI_LEAST], options, int32,
                           out);
 
 	ret = 0;
@@ -2430,17 +2463,29 @@ init (xlator_t *this)
 
         GF_OPTION_INIT ("thread-count", conf->max_count, int32, out);
 
-        GF_OPTION_INIT ("high-prio-threads",
-                        conf->ac_iot_limit[IOT_PRI_HI], int32, out);
+        GF_OPTION_INIT ("prio-high-max-threads",
+                        conf->ac_iot_max[IOT_PRI_HI], int32, out);
 
-        GF_OPTION_INIT ("normal-prio-threads",
-                        conf->ac_iot_limit[IOT_PRI_NORMAL], int32, out);
+        GF_OPTION_INIT ("prio-normal-max-threads",
+                        conf->ac_iot_max[IOT_PRI_NORMAL], int32, out);
 
-        GF_OPTION_INIT ("low-prio-threads",
-                        conf->ac_iot_limit[IOT_PRI_LO], int32, out);
+        GF_OPTION_INIT ("prio-low-max-threads",
+                        conf->ac_iot_max[IOT_PRI_LO], int32, out);
 
-        GF_OPTION_INIT ("least-prio-threads",
-                        conf->ac_iot_limit[IOT_PRI_LEAST], int32, out);
+        GF_OPTION_INIT ("prio-least-max-threads",
+                        conf->ac_iot_max[IOT_PRI_LEAST], int32, out);
+
+        GF_OPTION_INIT ("prio-high-min-threads",
+                        conf->ac_iot_min[IOT_PRI_HI], int32, out);
+
+        GF_OPTION_INIT ("prio-normal-min-threads",
+                        conf->ac_iot_min[IOT_PRI_NORMAL], int32, out);
+
+        GF_OPTION_INIT ("prio-low-min-threads",
+                        conf->ac_iot_min[IOT_PRI_LO], int32, out);
+
+        GF_OPTION_INIT ("prio-least-min-threads",
+                        conf->ac_iot_min[IOT_PRI_LEAST], int32, out);
 
         GF_OPTION_INIT ("idle-time", conf->idle_time, int32, out);
 
@@ -2529,44 +2574,79 @@ struct volume_options options[] = {
 	  .type = GF_OPTION_TYPE_INT,
 	  .min  = IOT_MIN_THREADS,
 	  .max  = IOT_MAX_THREADS,
-          .default_value = "24",
+          .default_value = "8",
           .description = "Number of threads in IO threads translator which "
                          "perform concurrent IO operations"
 
 	},
-	{ .key  = {"high-prio-threads"},
+	{ .key  = {"prio-high-max-threads"},
 	  .type = GF_OPTION_TYPE_INT,
 	  .min  = 1,
 	  .max  = IOT_MAX_THREADS,
-          .default_value = "8",
+          .default_value = "4",
           .description = "Max number of threads in IO threads translator which "
                          "perform high priority IO operations at a given time"
 
 	},
-	{ .key  = {"normal-prio-threads"},
+	{ .key  = {"prio-normal-max-threads"},
 	  .type = GF_OPTION_TYPE_INT,
 	  .min  = 1,
 	  .max  = IOT_MAX_THREADS,
-          .default_value = "8",
+          .default_value = "4",
           .description = "Max number of threads in IO threads translator which "
                          "perform normal priority IO operations at a given time"
 
 	},
-	{ .key  = {"low-prio-threads"},
+	{ .key  = {"prio-low-max-threads"},
 	  .type = GF_OPTION_TYPE_INT,
 	  .min  = 1,
 	  .max  = IOT_MAX_THREADS,
-          .default_value = "8",
+          .default_value = "4",
           .description = "Max number of threads in IO threads translator which "
                          "perform low priority IO operations at a given time"
 
 	},
-	{ .key  = {"least-prio-threads"},
+	{ .key  = {"prio-least-max-threads"},
 	  .type = GF_OPTION_TYPE_INT,
 	  .min  = 1,
 	  .max  = IOT_MAX_THREADS,
           .default_value = "1",
           .description = "Max number of threads in IO threads translator which "
+                         "perform least priority IO operations at a given time"
+	},
+	{ .key  = {"prio-high-min-threads"},
+	  .type = GF_OPTION_TYPE_INT,
+	  .min  = 0,
+	  .max  = IOT_MAX_THREADS,
+          .default_value = "3",
+          .description = "Min number of threads in IO threads translator which "
+                         "perform high priority IO operations at a given time"
+
+	},
+	{ .key  = {"prio-normal-min-threads"},
+	  .type = GF_OPTION_TYPE_INT,
+	  .min  = 0,
+	  .max  = IOT_MAX_THREADS,
+          .default_value = "2",
+          .description = "Min number of threads in IO threads translator which "
+                         "perform normal priority IO operations at a given time"
+
+	},
+	{ .key  = {"prio-low-min-threads"},
+	  .type = GF_OPTION_TYPE_INT,
+	  .min  = 0,
+	  .max  = IOT_MAX_THREADS,
+          .default_value = "1",
+          .description = "Min number of threads in IO threads translator which "
+                         "perform low priority IO operations at a given time"
+
+	},
+	{ .key  = {"prio-least-min-threads"},
+	  .type = GF_OPTION_TYPE_INT,
+	  .min  = 0,
+	  .max  = IOT_MAX_THREADS,
+          .default_value = "0",
+          .description = "Min number of threads in IO threads translator which "
                          "perform least priority IO operations at a given time"
 	},
         {.key   = {"idle-time"},

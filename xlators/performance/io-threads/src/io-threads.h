@@ -46,7 +46,7 @@ struct iot_conf;
 #define IOT_DEFAULT_IDLE                120     /* In secs. */
 
 #define IOT_MIN_THREADS         1
-#define IOT_MAX_THREADS         24
+#define IOT_MAX_THREADS         32
 
 
 #define IOT_THREAD_STACK_SIZE   ((size_t)(1024*1024))
@@ -73,7 +73,8 @@ struct iot_conf {
 
         struct list_head     reqs[IOT_PRI_MAX];
 
-        int32_t              ac_iot_limit[IOT_PRI_MAX];
+        int32_t              ac_iot_max[IOT_PRI_MAX];
+        int32_t              ac_iot_min[IOT_PRI_MAX];
         int32_t              ac_iot_count[IOT_PRI_MAX];
         int                  queue_size;
         pthread_attr_t       w_attr;
