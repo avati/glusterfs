@@ -4605,7 +4605,14 @@ nfs3_fh_resolve_entry_hard (nfs3_call_state_t *cs)
         if (ret == -2) {
                 gf_log (GF_NFS3, GF_LOG_TRACE, "Entry needs lookup: %s",
                         cs->resolvedloc.path);
-                if (nfs3_lookup_op (cs)) {
+		/* If the NFS op is lookup, let the resume callback
+		 * handle the sending of the lookup fop. Similarly,
+		 * if the NFS op is create, let the create call
+		 * go ahead in the resume callback so that an EEXIST gets
+		 * handled at posix without an extra fop at this point.
+		 */
+                if (nfs3_lookup_op (cs) ||
+		    (nfs3_create_op (cs) && !nfs3_create_exclusive_op (cs))) {
                         cs->lookuptype = GF_NFS3_FRESH;
                         cs->resolve_ret = 0;
                         nfs3_call_resume (cs);
