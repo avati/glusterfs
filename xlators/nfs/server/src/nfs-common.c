@@ -193,6 +193,8 @@ nfs_loc_fill (loc_t *loc, inode_t *inode, inode_t *parent, char *path)
 		gf_log (GF_NFS, GF_LOG_TRACE, "Getting the inode.");
                 loc->inode = inode_ref (inode);
                 loc->ino = inode->ino;
+                if (!uuid_is_null (inode->gfid))
+                        uuid_copy (loc->gfid, inode->gfid);
         } else
 		gf_log (GF_NFS, GF_LOG_TRACE, "No inode got.");
 
