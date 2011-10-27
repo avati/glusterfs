@@ -259,19 +259,19 @@ iot_schedule (call_frame_t *frame, xlator_t *this, call_stub_t *stub)
 
 
         switch (stub->fop) {
+        case GF_FOP_READ:
+        case GF_FOP_LOOKUP:
+                pri = IOT_PRI_HI;
+                break;
+
         case GF_FOP_OPEN:
         case GF_FOP_STAT:
         case GF_FOP_FSTAT:
-        case GF_FOP_LOOKUP:
         case GF_FOP_ACCESS:
         case GF_FOP_READLINK:
         case GF_FOP_OPENDIR:
         case GF_FOP_STATFS:
         case GF_FOP_READDIR:
-                pri = IOT_PRI_HI;
-                break;
-
-        case GF_FOP_READ:
         case GF_FOP_WRITE:
                 pri = IOT_PRI_NORMAL;
                 break;
@@ -2647,7 +2647,7 @@ struct volume_options options[] = {
 	  .type = GF_OPTION_TYPE_INT,
 	  .min  = IOT_MIN_THREADS,
 	  .max  = IOT_MAX_THREADS,
-          .default_value = "8",
+          .default_value = "10",
           .description = "Number of threads in IO threads translator which "
                          "perform concurrent IO operations"
 
@@ -2656,7 +2656,7 @@ struct volume_options options[] = {
 	  .type = GF_OPTION_TYPE_INT,
 	  .min  = 1,
 	  .max  = IOT_MAX_THREADS,
-          .default_value = "4",
+          .default_value = "8",
           .description = "Max number of threads in IO threads translator which "
                          "perform high priority IO operations at a given time"
 
@@ -2691,7 +2691,7 @@ struct volume_options options[] = {
 	  .type = GF_OPTION_TYPE_INT,
 	  .min  = 0,
 	  .max  = IOT_MAX_THREADS,
-          .default_value = "3",
+          .default_value = "4",
           .description = "Min number of threads in IO threads translator which "
                          "perform high priority IO operations at a given time"
 
