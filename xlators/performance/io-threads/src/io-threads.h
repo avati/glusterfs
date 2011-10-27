@@ -79,6 +79,9 @@ struct iot_conf {
         int                  queue_size;
         pthread_attr_t       w_attr;
 
+        fop_latency_t        displat[GF_FOP_MAXVALUE];
+        uint64_t             enqcnt;
+        double               avgqlen;
         xlator_t            *this;
 };
 

@@ -27,6 +27,7 @@
 #include "logging.h"
 #include "dict.h"
 #include "xlator.h"
+#include "statedump.h"
 #include "io-threads.h"
 #include <stdlib.h>
 #include <sys/time.h>
@@ -94,7 +95,39 @@ __iot_enqueue (iot_conf_t *conf, call_stub_t *stub, int pri)
 
         conf->queue_size++;
 
+        conf->enqcnt++;
+
+        conf->avgqlen += ((conf->queue_size - conf->avgqlen) / conf->enqcnt);
+
         return;
+}
+
+
+void
+iot_dispatch (iot_conf_t *conf, call_stub_t *stub)
+{
+        struct timeval   begin;
+        struct timeval   end;
+        double           elapsed;
+        fop_latency_t   *lat;
+        int              op;
+
+        op = stub->fop;
+
+        gettimeofday (&begin, NULL);
+        {
+                call_resume (stub);
+        }
+        gettimeofday (&end, NULL);
+
+        elapsed = (end.tv_sec - begin.tv_sec) * 1e6
+                + (end.tv_usec - begin.tv_usec);
+
+        lat = &conf->displat[op];
+
+        lat->total += elapsed;
+        lat->count++;
+        lat->mean = lat->mean + (elapsed - lat->mean) / lat->count;
 }
 
 
@@ -154,7 +187,7 @@ iot_worker (void *data)
                 pthread_mutex_unlock (&conf->mutex);
 
                 if (stub) /* guard against spurious wakeups */
-                        call_resume (stub);
+                        iot_dispatch (conf, stub);
 
                 if (bye)
                         break;
@@ -180,9 +213,9 @@ do_iot_schedule (iot_conf_t *conf, call_stub_t *stub, int pri)
         {
                 __iot_enqueue (conf, stub, pri);
 
-                pthread_cond_signal (&conf->cond);
-
                 ret = __iot_workers_scale (conf);
+
+                pthread_cond_signal (&conf->cond);
         }
         pthread_mutex_unlock (&conf->mutex);
 
@@ -2355,6 +2388,40 @@ set_stack_size (iot_conf_t *conf)
 }
 
 
+int
+iot_dump_priv (xlator_t *this)
+{
+        iot_conf_t *conf = NULL;
+        char key_prefix[GF_DUMP_MAX_BUF_LEN];
+        char key[GF_DUMP_MAX_BUF_LEN];
+        int i;
+
+        conf = this->private;
+
+        snprintf (key_prefix, GF_DUMP_MAX_BUF_LEN, "%s.%s", this->type,
+                  this->name);
+        gf_proc_dump_add_section (key_prefix);
+
+        for (i = 0; i < GF_FOP_MAXVALUE; i++) {
+                gf_proc_dump_build_key (key, key_prefix, gf_fop_list[i]);
+
+                gf_proc_dump_write (key, "%.03f,%"PRId64",%.03f",
+                                    conf->displat[i].mean,
+                                    conf->displat[i].count,
+                                    conf->displat[i].total);
+        }
+
+        gf_proc_dump_build_key (key, key_prefix, "avgqlen");
+        gf_proc_dump_write (key, "%.03f", conf->avgqlen);
+
+        memset (conf->displat, sizeof (conf->displat), 0);
+        conf->avgqlen = 0;
+        conf->enqcnt = 0;
+
+        return 0;
+}
+
+
 int32_t
 mem_acct_init (xlator_t *this)
 {
@@ -2565,6 +2632,12 @@ struct xlator_fops fops = {
 	.fxattrop    = iot_fxattrop,
         .rchecksum   = iot_rchecksum,
 };
+
+
+struct xlator_dumpops dumpops = {
+        .priv    = iot_dump_priv,
+};
+
 
 struct xlator_cbks cbks = {
 };
