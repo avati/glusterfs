@@ -285,6 +285,7 @@ posix_aio_writev (call_frame_t *frame, xlator_t *this, fd_t *fd,
                   struct iobref *iobref)
 {
         int32_t                op_errno   = EINVAL;
+        int32_t                op_ret     = -1;
         int                    _fd        = -1;
         struct posix_fd *      pfd        = NULL;
         int                    ret        = -1;
@@ -337,15 +338,24 @@ posix_aio_writev (call_frame_t *frame, xlator_t *this, fd_t *fd,
 
         ret = io_submit (priv->ctxp, 1, &iocb);
         if (ret != 1) {
-                gf_log (this->name, GF_LOG_ERROR,
-                        "io_submit() returned %d", ret);
-                errno = -ret;
+                int flags;
+                flags = fcntl (_fd, F_GETFL);
+                gf_log (THIS->name, GF_LOG_ERROR,
+                        "io_submit (fd=%d (flags=%d), size=%llu, off=%llx) => -1 (%s)",
+                        _fd, flags, iov_length (iov, count), offset, strerror (errno));
+                if (errno != EINVAL && errno != EFBIG) {
+                        op_errno = -errno;
+                        goto err;
+                } else {
+                        op_ret = iov_length (iov, count);
+                }
+
                 goto err;
         }
 
         return 0;
 err:
-        STACK_UNWIND_STRICT (writev, frame, -1, op_errno, 0, 0);
+        STACK_UNWIND_STRICT (writev, frame, op_ret, op_errno, 0, 0);
 
         if (paiocb) {
                 if (paiocb->iobref)
