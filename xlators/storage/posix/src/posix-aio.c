@@ -341,8 +341,9 @@ posix_aio_writev (call_frame_t *frame, xlator_t *this, fd_t *fd,
                 int flags;
                 flags = fcntl (_fd, F_GETFL);
                 gf_log (THIS->name, GF_LOG_ERROR,
-                        "io_submit (fd=%d (flags=%d), size=%llu, off=%llx) => -1 (%s)",
-                        _fd, flags, iov_length (iov, count), offset, strerror (errno));
+                        "io_submit (fd=%d (flags=%d), size=%d, off=%llx) => -1 (%s)",
+                        _fd, flags, iov_length (iov, count),
+                        (long long unsigned) offset, strerror (errno));
                 if (errno != EINVAL && errno != EFBIG) {
                         op_errno = -errno;
                         goto err;
