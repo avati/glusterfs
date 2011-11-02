@@ -144,7 +144,7 @@ posix_aio_readv (call_frame_t *frame, xlator_t *this, fd_t *fd,
 
         priv = this->private;
 
-        ret = posix_fd_ctx_get (fd, this, &pfd);
+        ret = posix_fd_ctx_get_off (fd, this, &pfd, offset);
         if (ret < 0) {
                 op_errno = -ret;
                 gf_log (this->name, GF_LOG_WARNING,
@@ -300,7 +300,7 @@ posix_aio_writev (call_frame_t *frame, xlator_t *this, fd_t *fd,
 
         priv = this->private;
 
-        ret = posix_fd_ctx_get (fd, this, &pfd);
+        ret = posix_fd_ctx_get_off (fd, this, &pfd, offset);
         if (ret < 0) {
                 op_errno = -ret;
                 gf_log (this->name, GF_LOG_WARNING,

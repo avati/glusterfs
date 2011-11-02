@@ -68,6 +68,7 @@ struct posix_fd {
 	int32_t flags;   /* flags for open/creat      */
 	DIR *   dir;     /* handle returned by the kernel */
         int     flushwrites;
+        int     odirect;
         struct list_head list; /* to add to the janitor list */
 };
 
@@ -158,5 +159,7 @@ int posix_entry_create_xattr_set (xlator_t *this, const char *path,
                                   dict_t *dict);
 
 int posix_fd_ctx_get (fd_t *fd, xlator_t *this, struct posix_fd **pfd);
+int posix_fd_ctx_get_off (fd_t *fd, xlator_t *this, struct posix_fd **pfd,
+                          off_t off);
 
 #endif /* _POSIX_H */
