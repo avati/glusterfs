@@ -3337,6 +3337,7 @@ posix_do_readdir (call_frame_t *frame, xlator_t *this,
         gf_dirent_t           entries;
         struct iatt           stbuf          = {0, };
         gf_dirent_t          *tmp_entry      = NULL;
+        inode_t              *ientry         = NULL;
 
 
         VALIDATE_OR_GOTO (frame, out);
@@ -3374,8 +3375,19 @@ posix_do_readdir (call_frame_t *frame, xlator_t *this,
 
         if (whichop == GF_FOP_READDIRP) {
                 list_for_each_entry (tmp_entry, &entries.list, list) {
-                        posix_istat (this, fd->inode->gfid, tmp_entry->d_name,
-                                     &stbuf);
+                        ientry = inode_grep (fd->inode->table, fd->inode,
+                                             tmp_entry->d_name);
+                        if (ientry) {
+                                memset (&stbuf, 0, sizeof (stbuf));
+                                uuid_copy (stbuf.ia_gfid, ientry->gfid);
+                                posix_fill_ino_from_gfid (this, &stbuf);
+
+                                inode_unref (ientry);
+                        } else {
+                                posix_istat (this, fd->inode->gfid,
+                                             tmp_entry->d_name, &stbuf);
+                        }
+
                         if (stbuf.ia_ino)
                                 tmp_entry->d_ino = stbuf.ia_ino;
                         tmp_entry->d_stat = stbuf;

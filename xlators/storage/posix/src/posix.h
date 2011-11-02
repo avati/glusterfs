@@ -161,5 +161,6 @@ int posix_entry_create_xattr_set (xlator_t *this, const char *path,
 int posix_fd_ctx_get (fd_t *fd, xlator_t *this, struct posix_fd **pfd);
 int posix_fd_ctx_get_off (fd_t *fd, xlator_t *this, struct posix_fd **pfd,
                           off_t off);
+void posix_fill_ino_from_gfid (xlator_t *this, struct iatt *buf);
 
 #endif /* _POSIX_H */
