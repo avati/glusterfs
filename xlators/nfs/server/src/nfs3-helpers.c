@@ -2163,6 +2163,9 @@ nfs3_log_common_call (uint32_t xid, char *op, struct nfs3_fh *fh)
 {
         char    fhstr[1024];
 
+	if (gf_log_loglevel < GF_LOG_DEBUG)
+		return;
+
         nfs3_fh_to_str (fh, fhstr);
         gf_log (GF_NFS3, GF_LOG_DEBUG, "XID: %x, %s: args: %s", xid, op,
                 fhstr);
@@ -2175,6 +2178,8 @@ nfs3_log_fh_entry_call (uint32_t xid, char *op, struct nfs3_fh *fh,
 {
         char    fhstr[1024];
 
+	if (gf_log_loglevel < GF_LOG_DEBUG)
+		return;
         nfs3_fh_to_str (fh, fhstr);
         gf_log (GF_NFS3, GF_LOG_DEBUG, "XID: %x, %s: args: %s, name: %s", xid,
                 op, fhstr, name);
@@ -2188,6 +2193,8 @@ nfs3_log_rename_call (uint32_t xid, struct nfs3_fh *src, char *sname,
         char    sfhstr[1024];
         char    dfhstr[1024];
 
+	if (gf_log_loglevel < GF_LOG_DEBUG)
+		return;
         nfs3_fh_to_str (src, sfhstr);
         nfs3_fh_to_str (dst, dfhstr);
         gf_log (GF_NFS3, GF_LOG_DEBUG, "XID: %x, RENAME: args: Src: %s, "
@@ -2207,6 +2214,8 @@ nfs3_log_create_call (uint32_t xid, struct nfs3_fh *fh, char *name,
         char    unchkd[] = "UNCHECKED";
         char    guarded[] = "GUARDED";
 
+	if (gf_log_loglevel < GF_LOG_DEBUG)
+		return;
         nfs3_fh_to_str (fh, fhstr);
         if (mode == EXCLUSIVE)
                 modestr = exclmode;
@@ -2230,6 +2239,8 @@ nfs3_log_mknod_call (uint32_t xid, struct nfs3_fh *fh, char *name, int type)
         char    sock[] = "SOCK";
         char    fifo[] = "FIFO";
 
+	if (gf_log_loglevel < GF_LOG_DEBUG)
+		return;
         nfs3_fh_to_str (fh, fhstr);
         if (type == NF3CHR)
                 modestr = chr;
@@ -2251,6 +2262,8 @@ nfs3_log_symlink_call (uint32_t xid, struct nfs3_fh *fh, char *name, char *tgt)
 {
         char    fhstr[1024];
 
+	if (gf_log_loglevel < GF_LOG_DEBUG)
+		return;
         nfs3_fh_to_str (fh, fhstr);
         gf_log (GF_NFS3, GF_LOG_DEBUG, "XID: %x, SYMLINK: args: %s, name: %s,"
                 " target: %s", xid, fhstr, name, tgt);
@@ -2264,6 +2277,8 @@ nfs3_log_link_call (uint32_t xid, struct nfs3_fh *fh, char *name,
         char    dfhstr[1024];
         char    tfhstr[1024];
 
+	if (gf_log_loglevel < GF_LOG_DEBUG)
+		return;
         nfs3_fh_to_str (fh, dfhstr);
         nfs3_fh_to_str (tgt, tfhstr);
         gf_log (GF_NFS3, GF_LOG_DEBUG, "XID: %x, LINK: args: %s, name: %s,"
@@ -2277,6 +2292,8 @@ nfs3_log_rw_call (uint32_t xid, char *op, struct nfs3_fh *fh, offset3 offt,
 {
         char    fhstr[1024];
 
+	if (gf_log_loglevel < GF_LOG_DEBUG)
+		return;
         nfs3_fh_to_str (fh, fhstr);
         if (stablewrite == -1)
                 gf_log (GF_NFS3, GF_LOG_DEBUG, "XID: %x, %s: args: %s, offset:"
@@ -3908,18 +3925,25 @@ void
 nfs3_log_common_res (uint32_t xid, int op, nfsstat3 stat, int pstat)
 {
         char    errstr[1024];
+	int	ll = nfs3_loglevel (op, stat);
 
+	if (gf_log_loglevel < ll)
+		return;
         nfs3_stat_to_errstr (xid, nfs3op_strings[op].str, stat, pstat, errstr);
-        gf_log (GF_NFS3, nfs3_loglevel (op, stat), "%s", errstr);
+        gf_log (GF_NFS3, ll, "%s", errstr);
 }
 
 void
 nfs3_log_readlink_res (uint32_t xid, nfsstat3 stat, int pstat, char *linkpath)
 {
         char    errstr[1024];
+	int	ll = nfs3_loglevel (NFS3_READLINK, stat);
+
+	if (gf_log_loglevel < ll)
+		return;
 
         nfs3_stat_to_errstr (xid, "READLINK", stat, pstat, errstr);
-        gf_log (GF_NFS3, nfs3_loglevel (NFS3_READLINK, stat), "%s, target: %s",
+        gf_log (GF_NFS3, ll, "%s, target: %s",
 		errstr, linkpath);
 
 }
@@ -3932,6 +3956,8 @@ nfs3_log_read_res (uint32_t xid, nfsstat3 stat, int pstat, count3 count,
 	int	ll = GF_LOG_DEBUG;
 
 	ll = nfs3_loglevel (NFS3_READ, stat);
+	if (gf_log_loglevel < ll)
+		return;
         nfs3_stat_to_errstr (xid, "READ", stat, pstat, errstr);
         if (vec)
                 gf_log (GF_NFS3, ll, "%s, count: %"PRIu32", is_eof:"
@@ -3950,6 +3976,9 @@ nfs3_log_write_res (uint32_t xid, nfsstat3 stat, int pstat, count3 count,
         char    errstr[1024];
 	int	ll = nfs3_loglevel (NFS3_WRITE, stat);
 
+	if (gf_log_loglevel < ll)
+		return;
+
         nfs3_stat_to_errstr (xid, "WRITE", stat, pstat, errstr);
         gf_log (GF_NFS3, ll, "%s, count: %"PRIu32", %s,wverf: %"PRIu64
                 , errstr, count, (stable == UNSTABLE)?"UNSTABLE":"STABLE",
@@ -3963,7 +3992,10 @@ nfs3_log_newfh_res (uint32_t xid, int op, nfsstat3 stat, int pstat,
 {
         char    errstr[1024];
         char    fhstr[1024];
+	int	ll = nfs3_loglevel (op, stat);
 
+	if (gf_log_loglevel < ll)
+		return;
         nfs3_stat_to_errstr (xid, nfs3op_strings[op].str, stat, pstat, errstr);
         nfs3_fh_to_str (newfh, fhstr);
 
@@ -3978,6 +4010,8 @@ nfs3_log_readdir_res (uint32_t xid, nfsstat3 stat, int pstat, uint64_t cverf,
         char    errstr[1024];
 	int	ll = nfs3_loglevel (NFS3_READDIR, stat);
 
+	if (gf_log_loglevel < ll)
+		return;
         nfs3_stat_to_errstr (xid, "READDIR", stat, pstat, errstr);
         gf_log (GF_NFS3, ll, "%s, count: %"PRIu32", cverf: %"PRIu64
                 ", is_eof: %d", errstr, count, cverf, is_eof);
@@ -3991,6 +4025,8 @@ nfs3_log_readdirp_res (uint32_t xid, nfsstat3 stat, int pstat, uint64_t cverf,
         char    errstr[1024];
 	int	ll = nfs3_loglevel (NFS3_READDIRP, stat);
 
+	if (gf_log_loglevel < ll)
+		return;
         nfs3_stat_to_errstr (xid, "READDIRPLUS", stat, pstat, errstr);
         gf_log (GF_NFS3, ll, "%s, dircount: %"PRIu32", maxcount: %"
                 PRIu32", cverf: %"PRIu64", is_eof: %d", errstr, dircount,
@@ -4004,6 +4040,8 @@ nfs3_log_commit_res (uint32_t xid, nfsstat3 stat, int pstat, uint64_t wverf)
         char    errstr[1024];
 	int	ll = nfs3_loglevel (NFS3_COMMIT, stat);
 
+	if (gf_log_loglevel < ll)
+		return;
         nfs3_stat_to_errstr (xid, "COMMIT", stat, pstat, errstr);
         gf_log (GF_NFS3, ll, "%s, wverf: %"PRIu64, errstr, wverf);
 }
@@ -4014,6 +4052,9 @@ nfs3_log_readdir_call (uint32_t xid, struct nfs3_fh *fh, count3 dircount,
                        count3 maxcount)
 {
         char    fhstr[1024];
+
+	if (gf_log_loglevel < GF_LOG_DEBUG)
+		return;
 
         nfs3_fh_to_str (fh, fhstr);
 
