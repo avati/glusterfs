@@ -965,7 +965,7 @@ __posix_fd_ctx_get (fd_t *fd, xlator_t *this, struct posix_fd **pfd_p)
         }
 
         if (fd->inode->ia_type == IA_IFREG) {
-                _fd = open (real_path, O_RDWR|O_LARGEFILE|O_SYNC);
+                _fd = open (real_path, O_RDWR|O_LARGEFILE);
                 if (_fd == -1) {
                         GF_FREE (pfd);
                         pfd = NULL;
