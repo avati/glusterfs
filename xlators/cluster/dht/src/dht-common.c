@@ -145,6 +145,74 @@ out:
 
 
 int
+dht_discover_complete (xlator_t *this, call_frame_t *discover_frame)
+{
+        dht_local_t     *local = NULL;
+        call_frame_t    *main_frame = NULL;
+        int              op_errno = 0;
+        int              ret = -1;
+        dht_layout_t    *layout = NULL;
+
+        local = discover_frame->local;
+        layout = local->layout;
+
+        LOCK(&discover_frame->lock);
+        {
+                main_frame = local->main_frame;
+                local->main_frame = NULL;
+        }
+        UNLOCK(&discover_frame->lock);
+
+        if (!main_frame)
+                return 0;
+
+        if (local->file_count && local->dir_count) {
+                gf_log (this->name, GF_LOG_ERROR,
+                        "path %s exists as a file on one subvolume "
+                        "and directory on another. "
+                        "Please fix it manually",
+                        local->loc.path);
+                op_errno = EIO;
+                goto out;
+        }
+
+        if (local->cached_subvol) {
+                ret = dht_layout_preset (this, local->cached_subvol,
+                                         local->inode);
+                if (ret < 0) {
+                        gf_log (this->name, GF_LOG_WARNING,
+                                "failed to set layout for subvolume %s",
+                                local->cached_subvol ? local->cached_subvol->name : "<nil>");
+                        op_errno = EINVAL;
+                        goto out;
+                }
+        } else {
+                ret = dht_layout_normalize (this, &local->loc, layout);
+
+                if (ret != 0) {
+                        gf_log (this->name, GF_LOG_DEBUG,
+                                "normalizing failed on %s",
+                                local->loc.path);
+                        op_errno = EINVAL;
+                        goto out;
+                }
+
+                dht_layout_set (this, local->inode, layout);
+        }
+
+        DHT_STACK_UNWIND (lookup, main_frame, local->op_ret, local->op_errno,
+                          local->inode, &local->stbuf, local->xattr,
+                          &local->postparent);
+        return 0;
+out:
+        DHT_STACK_UNWIND (lookup, main_frame, -1, op_errno, NULL, NULL, NULL,
+                          NULL);
+
+        return ret;
+}
+
+
+int
 dht_discover_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
                   int op_ret, int op_errno,
                   inode_t *inode, struct iatt *stbuf, dict_t *xattr,
@@ -157,6 +225,7 @@ dht_discover_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
         int           ret                     = -1;
         int           is_dir                  = 0;
         int           is_linkfile             = 0;
+        int           attempt_unwind          = 0;
 
         GF_VALIDATE_OR_GOTO ("dht", frame, out);
         GF_VALIDATE_OR_GOTO ("dht", this, out);
@@ -208,6 +277,7 @@ dht_discover_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
                         if (!is_linkfile) {
                                 /* real file */
                                 local->cached_subvol = prev->this;
+                                attempt_unwind = 1;
                         } else {
                                 goto unlock;
                         }
@@ -230,55 +300,17 @@ dht_discover_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
         }
 unlock:
         UNLOCK (&frame->lock);
-
-
+out:
         this_call_cnt = dht_frame_return (frame);
 
-        if (is_last_call (this_call_cnt)) {
-                if (local->file_count && local->dir_count) {
-                        gf_log (this->name, GF_LOG_ERROR,
-                                "path %s exists as a file on one subvolume "
-                                "and directory on another. "
-                                "Please fix it manually",
-                                local->loc.path);
-                        op_errno = EIO;
-                        goto out;
-                }
-
-                if (local->cached_subvol) {
-                        ret = dht_layout_preset (this, local->cached_subvol,
-                                                 local->inode);
-                        if (ret < 0) {
-                                gf_log (this->name, GF_LOG_WARNING,
-                                        "failed to set layout for subvolume %s",
-                                        local->cached_subvol ? local->cached_subvol->name : "<nil>");
-                                op_errno = EINVAL;
-                                goto out;
-                        }
-                } else {
-                        ret = dht_layout_normalize (this, &local->loc, layout);
-
-                        if (ret != 0) {
-                                gf_log (this->name, GF_LOG_DEBUG,
-                                        "normalizing failed on %s",
-                                        local->loc.path);
-                                op_errno = EINVAL;
-                                goto out;
-                        }
-
-                        dht_layout_set (this, local->inode, layout);
-
-                }
-                DHT_STACK_UNWIND (lookup, frame, local->op_ret, local->op_errno,
-                                  local->inode, &local->stbuf, local->xattr,
-                                  &local->postparent);
+        if (is_last_call (this_call_cnt) || attempt_unwind) {
+                dht_discover_complete (this, frame);
         }
 
-        return 0;
-out:
-        DHT_STACK_UNWIND (lookup, frame, -1, op_errno, NULL, NULL, NULL, NULL);
+        if (is_last_call (this_call_cnt))
+                DHT_STACK_DESTROY (frame);
 
-        return ret;
+        return 0;
 }
 
 
@@ -291,6 +323,7 @@ dht_discover (call_frame_t *frame, xlator_t *this, loc_t *loc)
         int          call_cnt = 0;
         int          op_errno = 0;
         int          i = 0;
+        call_frame_t *discover_frame = NULL;
 
 
         conf = this->private;
@@ -314,8 +347,18 @@ dht_discover (call_frame_t *frame, xlator_t *this, loc_t *loc)
 
         uuid_copy (local->gfid, loc->gfid);
 
+        discover_frame = copy_frame (frame);
+        if (!discover_frame) {
+                op_errno = ENOMEM;
+                goto err;
+        }
+
+        discover_frame->local = local;
+        frame->local = NULL;
+        local->main_frame = frame;
+
         for (i = 0; i < call_cnt; i++) {
-                STACK_WIND (frame, dht_discover_cbk,
+                STACK_WIND (discover_frame, dht_discover_cbk,
                             conf->subvolumes[i],
                             conf->subvolumes[i]->fops->lookup,
                             &local->loc, local->xattr_req);
