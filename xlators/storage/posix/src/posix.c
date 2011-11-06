@@ -3226,12 +3226,13 @@ posix_fentrylk (call_frame_t *frame, xlator_t *this,
 
 
 int
-__posix_fill_readdir (fd_t *fd, DIR *dir, off_t off, size_t size,
-                      gf_dirent_t *entries)
+posix_fill_readdir (fd_t *fd, DIR *dir, off_t off, size_t size,
+                    gf_dirent_t *entries)
 {
         off_t     in_case = -1;
         size_t    filled = 0;
         int             count = 0;
+        char      entrybuf[sizeof(struct dirent) + 256 + 8];
         struct dirent  *entry          = NULL;
         int32_t               this_size      = -1;
         gf_dirent_t          *this_entry     = NULL;
@@ -3254,7 +3255,8 @@ __posix_fill_readdir (fd_t *fd, DIR *dir, off_t off, size_t size,
                 }
 
                 errno = 0;
-                entry = readdir (dir);
+                entry = NULL;
+                readdir_r (dir, (struct dirent *)entrybuf, &entry);
 
                 if (!entry) {
                         if (errno == EBADF) {
@@ -3363,12 +3365,7 @@ posix_do_readdir (call_frame_t *frame, xlator_t *this,
                 goto out;
         }
 
-
-        LOCK (&fd->lock);
-        {
-                count = __posix_fill_readdir (fd, dir, off, size, &entries);
-        }
-        UNLOCK (&fd->lock);
+        count = posix_fill_readdir (fd, dir, off, size, &entries);
 
         /* pick ENOENT to indicate EOF */
         op_errno = errno;
