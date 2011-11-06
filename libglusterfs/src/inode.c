@@ -653,6 +653,39 @@ inode_grep (inode_table_t *table, inode_t *parent, const char *name)
         return inode;
 }
 
+
+int
+inode_grep_gfid (inode_table_t *table, inode_t *parent, const char *name,
+                 uuid_t gfid)
+{
+        inode_t   *inode = NULL;
+        dentry_t  *dentry = NULL;
+        int        ret = -1;
+
+        if (!table || !parent || !name) {
+                gf_log_callingfn (THIS->name, GF_LOG_WARNING,
+                                  "table || parent || name not found");
+                return ret;
+        }
+
+        pthread_mutex_lock (&table->lock);
+        {
+                dentry = __dentry_grep (table, parent, name);
+
+                if (dentry)
+                        inode = dentry->inode;
+
+                if (inode) {
+                        uuid_copy (gfid, inode->gfid);
+                        ret = 0;
+                }
+        }
+        pthread_mutex_unlock (&table->lock);
+
+        return ret;
+}
+
+
 int
 __is_root_gfid (uuid_t gfid)
 {
