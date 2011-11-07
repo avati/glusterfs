@@ -1028,15 +1028,18 @@ posix_fd_ctx_get_off (fd_t *fd, xlator_t *this, struct posix_fd **pfd,
                         flags = fcntl ((*pfd)->fd, F_GETFL);
                         ret = fcntl ((*pfd)->fd, F_SETFL, (flags & (~O_DIRECT)));
                         (*pfd)->odirect = 0;
-                        need_fsync = 1;
+                        if ((*pfd)->op_performed)
+                                need_fsync = 1;
                 }
 
                 if (((offset & 0xfff) == 0) && (!(*pfd)->odirect)) {
                         flags = fcntl ((*pfd)->fd, F_GETFL);
                         ret = fcntl ((*pfd)->fd, F_SETFL, (flags & O_DIRECT));
                         (*pfd)->odirect = 1;
-                        need_fsync = 1;
+                        if ((*pfd)->op_performed)
+                                need_fsync = 1;
                 }
+                (*pfd)->op_performed = 1;
         }
 unlock:
         UNLOCK (&fd->inode->lock);

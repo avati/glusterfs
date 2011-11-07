@@ -69,6 +69,7 @@ struct posix_fd {
 	DIR *   dir;     /* handle returned by the kernel */
         int     flushwrites;
         int     odirect;
+        int     op_performed;
         struct list_head list; /* to add to the janitor list */
 };
 
