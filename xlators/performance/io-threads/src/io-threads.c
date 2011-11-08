@@ -257,6 +257,8 @@ iot_schedule (call_frame_t *frame, xlator_t *this, call_stub_t *stub)
                 goto out;
         }
 
+        pri = IOT_PRI_HI;
+        goto out;
 
         switch (stub->fop) {
         case GF_FOP_READ:
