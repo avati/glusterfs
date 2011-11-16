@@ -444,10 +444,16 @@ posix_handle_unset_gfid (xlator_t *this, uuid_t gfid)
 
         ret = unlink (path);
         if (ret == -1) {
+                if (errno == EISDIR) {
+                        ret = rmdir (path);
+                        if (!ret)
+                                goto out;
+                }
                 gf_log (this->name, GF_LOG_WARNING,
                         "unlink %s failed (%s)", path, strerror (errno));
         }
 
+out:
         return ret;
 }
 
