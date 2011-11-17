@@ -145,6 +145,59 @@ out:
         return len;
 }
 
+int
+posix_handle_gfid_path (xlator_t *this, uuid_t gfid, const char *basename,
+                        char *buf, size_t buflen)
+{
+        struct posix_private *priv = NULL;
+        char                 *uuid_str = NULL;
+        int                   len = 0;
+        char                  linkname[300] = {0,}; /* "../../<gfid>/<NAME_MAX>" */
+        int                   ret = 0;
+        struct stat           stat;
+
+        priv = this->private;
+
+        len = priv->base_path_length  /* option directory "/export" */
+                + 1                   /* "/" */
+                + 11                  /* ".glusterfs/" */
+                + 3                   /* "00/" */
+                + 3                   /* "00/" */
+                + 36                  /* "00000000-0000-0000-0000-000000000000" */
+                + 1                   /* '\0' */
+                ;
+
+        if (basename) {
+                len += (strlen (basename) + 1);
+        } else {
+                len += 256;  /* worst-case for directory's symlink-handle expansion */
+        }
+
+        if (buflen < len || !buf)
+                return len;
+
+        uuid_str = uuid_utoa (gfid);
+
+        if (__is_root_gfid (gfid)) {
+                if (basename) {
+                        len = snprintf (buf, buflen, "%s/%s", priv->base_path,
+                                        basename);
+                } else {
+                        strncpy (buf, priv->base_path, buflen);
+                }
+        }
+
+        if (basename) {
+                len = snprintf (buf, buflen, "%s/%s/%02x/%02x/%s/%s", priv->base_path,
+                                HANDLE_PFX, gfid[0], gfid[1], uuid_str, basename);
+        } else {
+                len = snprintf (buf, buflen, "%s/%s/%02x/%02x/%s", priv->base_path,
+                                HANDLE_PFX, gfid[0], gfid[1], uuid_str);
+        }
+out:
+        return len;
+}
+
 
 int
 posix_handle_init (xlator_t *this)
@@ -430,7 +483,7 @@ posix_handle_unset_gfid (xlator_t *this, uuid_t gfid)
         int          ret = 0;
         struct stat  stat;
 
-        MAKE_HANDLE_PATH (path, this, gfid, NULL);
+        MAKE_HANDLE_GFID_PATH (path, this, gfid, NULL);
 
         ret = lstat (path, &stat);
 
@@ -444,11 +497,6 @@ posix_handle_unset_gfid (xlator_t *this, uuid_t gfid)
 
         ret = unlink (path);
         if (ret == -1) {
-                if (errno == EISDIR) {
-                        ret = rmdir (path);
-                        if (!ret)
-                                goto out;
-                }
                 gf_log (this->name, GF_LOG_WARNING,
                         "unlink %s failed (%s)", path, strerror (errno));
         }
