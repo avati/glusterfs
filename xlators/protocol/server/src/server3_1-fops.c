@@ -4663,7 +4663,7 @@ server_symlink (rpcsvc_request_t *req)
                 return ret;
 
         args.bname    = alloca (req->msg[0].iov_len);
-        args.linkname = alloca (256);
+        args.linkname = alloca (4096);
 
         if (!xdr_to_generic (req->msg[0], &args, (xdrproc_t)xdr_gfs3_symlink_req)) {
                 //failed to decode msg;
