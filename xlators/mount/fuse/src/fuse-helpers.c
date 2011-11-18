@@ -299,6 +299,8 @@ fuse_loc_fill (loc_t *loc, fuse_state_t *state, ino_t ino,
                 if (!parent) {
                         parent = inode_parent (inode, par, name);
                         loc->parent = parent;
+                        if (parent)
+                                uuid_copy (loc->pargfid, parent->gfid);
                 }
 
                 ret = inode_path (inode, NULL, &path);

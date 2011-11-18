@@ -3867,6 +3867,7 @@ init (xlator_t *this)
                 goto out;
         }
 
+#ifdef HAVE_LIBAIO
         op_ret = posix_aio_init (this);
         if (op_ret == -1) {
                 gf_log (this->name, GF_LOG_ERROR,
@@ -3874,6 +3875,7 @@ init (xlator_t *this)
                 ret = -1;
                 goto out;
         }
+#endif
 
         pthread_mutex_init (&_private->janitor_lock, NULL);
         pthread_cond_init (&_private->janitor_cond, NULL);

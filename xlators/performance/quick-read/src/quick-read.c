@@ -82,7 +82,6 @@ static int32_t
 qr_loc_fill (loc_t *loc, inode_t *inode, char *path)
 {
         int32_t  ret    = -1;
-        char    *parent = NULL;
 	char	*path_copy = NULL;
 
         GF_VALIDATE_OR_GOTO_WITH_ERROR ("quick-read", loc, out, errno, EINVAL);
@@ -93,26 +92,8 @@ qr_loc_fill (loc_t *loc, inode_t *inode, char *path)
                                         EINVAL);
 
         loc->inode = inode_ref (inode);
+        uuid_copy (loc->gfid, inode->gfid);
         loc->path = gf_strdup (path);
-        loc->ino = inode->ino;
-
-        path_copy = gf_strdup (path);
-        if (path_copy == NULL) {
-                ret = -1;
-                goto out;
-        }
-
-        parent = dirname (path_copy);
-
-        loc->parent = inode_from_path (inode->table, parent);
-        if (loc->parent == NULL) {
-                ret = -1;
-                errno = EINVAL;
-                gf_log ("quick-read", GF_LOG_WARNING,
-                        "cannot search parent inode for path (%s)", path);
-                goto out;
-        }
-
         loc->name = strrchr (loc->path, '/');
         ret = 0;
 out:

@@ -47,6 +47,15 @@
         __len = posix_handle_path (this, gfid, base, var, __len);       \
         } while (0)
 
+#define MAKE_HANDLE_GFID_PATH(var, this, gfid, base) do {               \
+                int __len = 0;                                          \
+                __len = posix_handle_gfid_path (this, gfid, base, NULL, 0); \
+                if (__len <= 0)                                         \
+                        break;                                          \
+                var = alloca (__len);                                   \
+                __len = posix_handle_gfid_path (this, gfid, base, var, __len); \
+        } while (0)
+
 
 #define MAKE_HANDLE_RELPATH(var, this, gfid, base) do {                 \
         int __len;                                                      \
@@ -128,6 +137,10 @@
 int
 posix_handle_path (xlator_t *this, uuid_t gfid, const char *basename, char *buf,
                    size_t len);
+
+int
+posix_handle_gfid_path (xlator_t *this, uuid_t gfid, const char *basename,
+                        char *buf, size_t len);
 
 int
 posix_handle_hard (xlator_t *this, const char *path, uuid_t gfid,
