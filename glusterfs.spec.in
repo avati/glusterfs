@@ -95,6 +95,15 @@ is in userspace and easily manageable.
 This package provides support to ib-verbs library.
 %endif
 
+%package api
+Summary: GlusterFS API for writing applications
+License: TPLv2 or LGPLv3+
+Group: Applications/File
+Requires: %{name} = %{version}-%{release}
+
+%description api
+GlusterFS API for writing applications
+
 %if 0%{?_can_georeplicate}
 %if 0%{!?_without_georeplication:1}
 %package geo-replication
@@ -255,7 +264,9 @@ fi
 %doc AUTHORS ChangeLog COPYING-GPLV2 COPYING-LGPLV3 INSTALL NEWS README THANKS
 %doc extras/glusterfs-logrotate
 %{_libdir}/glusterfs
-%{_libdir}/*.so.*
+%{_libdir}/libglusterfs.so.*
+%{_libdir}/libgfrpc.so.*
+%{_libdir}/libgfxdr.so.*
 %{_sbindir}/glusterfs*
 %{_mandir}/man8/*gluster*.8*
 %dir %{_localstatedir}/log/glusterfs
@@ -275,6 +286,12 @@ fi
 %defattr(-,root,root)
 %{_libdir}/glusterfs/%{version}/rpc-transport/rdma*
 %endif
+
+%files api
+%defattr(-,root,root)
+%{_libdir}/pkgconfig/glusterfs-api.pc
+%{_libdir}/libgfapi.so.*
+%{_includedir}/glusterfs/api/*
 
 %if 0%{?_can_georeplicate}
 %if 0%{!?_without_georeplication:1}
@@ -401,6 +418,7 @@ fi
 %files devel
 %defattr(-,root,root,-)
 %{_includedir}/glusterfs
+%exclude %{_includedir}/glusterfs/api/*
 %exclude %{_includedir}/glusterfs/y.tab.h
 %{_libdir}/*.so
 
