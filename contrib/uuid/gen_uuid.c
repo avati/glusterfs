@@ -672,8 +672,10 @@ void uuid_generate_random(uuid_t out)
  */
 void uuid_generate(uuid_t out)
 {
+#ifdef GLUSTERFS_NEEDS_RANDOM_FD_UUID
 	if (get_random_fd() >= 0)
 		uuid_generate_random(out);
 	else
+#endif
 		uuid_generate_time(out);
 }
