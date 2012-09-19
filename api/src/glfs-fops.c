@@ -120,6 +120,34 @@ out:
 
 
 int
+glfs_stat (struct glfs *fs, const char *path, struct stat *stat)
+{
+	int              ret = -1;
+	xlator_t        *subvol = NULL;
+	loc_t            loc = {0, };
+	struct iatt      iatt = {0, };
+
+	__glfs_entry_fs (fs);
+
+	subvol = glfs_active_subvol (fs);
+	if (!subvol) {
+		ret = -1;
+		errno = EIO;
+		goto out;
+	}
+
+	ret = glfs_resolve (fs, subvol, path, &loc, &iatt);
+
+	if (ret == 0 && stat)
+		iatt_to_stat (&iatt, stat);
+out:
+	loc_wipe (&loc);
+
+	return ret;
+}
+
+
+int
 glfs_fstat (struct glfs_fd *glfd, struct stat *stat)
 {
 	int              ret = -1;
@@ -825,3 +853,139 @@ glfs_ftruncate_async (struct glfs_fd *glfd, off_t offset,
 	return ret;
 }
 
+
+int
+glfs_access (struct glfs *fs, const char *path, int mode)
+{
+	int              ret = -1;
+	xlator_t        *subvol = NULL;
+	loc_t            loc = {0, };
+	struct iatt      iatt = {0, };
+
+	__glfs_entry_fs (fs);
+
+	subvol = glfs_active_subvol (fs);
+	if (!subvol) {
+		ret = -1;
+		errno = EIO;
+		goto out;
+	}
+
+	ret = glfs_resolve (fs, subvol, path, &loc, &iatt);
+	if (ret)
+		goto out;
+
+	ret = syncop_access (subvol, &loc, mode);
+out:
+	loc_wipe (&loc);
+
+	return ret;
+}
+
+
+int
+glfs_readlink (struct glfs *fs, cosnt char *path, char *buf, size_t bufsiz)
+{
+	int              ret = -1;
+	xlator_t        *subvol = NULL;
+	loc_t            loc = {0, };
+	struct iatt      iatt = {0, };
+
+	__glfs_entry_fs (fs);
+
+	subvol = glfs_active_subvol (fs);
+	if (!subvol) {
+		ret = -1;
+		errno = EIO;
+		goto out;
+	}
+
+	ret = glfs_lresolve (fs, subvol, path, &loc, &iatt);
+	if (ret)
+		goto out;
+
+	ret = syncop_readlink (subvol, &loc, &buf, bufsiz);
+out:
+	loc_wipe (&loc);
+
+	return ret;
+}
+
+
+int
+glfs_mknod (struct glfs *fs, const char *path, mode_t mode, dev_t dev)
+{
+	int              ret = -1;
+	xlator_t        *subvol = NULL;
+	loc_t            loc = {0, };
+	struct iatt      iatt = {0, };
+	uuid_t           gfid;
+	dict_t          *xattr_req = NULL;
+
+	__glfs_entry_fs (fs);
+
+	subvol = glfs_active_subvol (fs);
+	if (!subvol) {
+		ret = -1;
+		errno = EIO;
+		goto out;
+	}
+
+	xattr_req = dict_new ();
+	if (!xattr_req) {
+		ret = -1;
+		errno = ENOMEM;
+		goto out;
+	}
+
+	uuid_generate (gfid);
+	ret = dict_set_static_bin (xattr_req, "gfid-req", gfid, 16);
+	if (ret) {
+		ret = -1;
+		errno = ENOMEM;
+		goto out;
+	}
+
+	ret = glfs_resolve (fs, subvol, path, &loc, &iatt);
+	if (ret == -1 && errno != ENOENT)
+		/* Any other type of error is fatal */
+		goto out;
+
+	if (ret == -1 && errno == ENOENT && !loc.parent)
+		/* The parent directory or an ancestor even
+		   higher does not exist
+		*/
+		goto out;
+
+	if (loc.inode) {
+		if (IA_ISDIR (iatt.ia_type)) {
+			ret = -1;
+			errno = EISDIR;
+			goto out;
+		}
+
+		if (!IA_ISREG (iatt.ia_type)) {
+			ret = -1;
+			errno = EINVAL;
+			goto out;
+		}
+	}
+
+	if (ret == -1 && errno == ENOENT) {
+		loc.inode = inode_new (loc.parent->table);
+		if (!loc.inode) {
+			ret = -1;
+			errno = ENOMEM;
+			goto out;
+		}
+	}
+
+	ret = syncop_mknod (subvol, &loc, mode, dev, xattr_req);
+out:
+	loc_wipe (&loc);
+
+	if (xattr_req)
+		dict_destroy (xattr_req);
+
+	return ret;
+}

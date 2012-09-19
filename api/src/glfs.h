@@ -353,6 +353,7 @@ int glfs_ftruncate_async (glfs_fd_t *fd, off_t length, glfs_io_cbk fn,
 			  void *data);
 
 int glfs_lstat (glfs_t *fs, const char *path, struct stat *buf);
+int glfs_stat (glfs_t *fs, const char *path, struct stat *buf);
 int glfs_fstat (glfs_fd_t *fd, struct stat *buf);
 
 int glfs_fsync (glfs_fd_t *fd);
@@ -360,6 +361,12 @@ int glfs_fsync_async (glfs_fd_t *fd, glfs_io_cbk fn, void *data);
 
 int glfs_fdatasync (glfs_fd_t *fd);
 int glfs_fdatasync_async (glfs_fd_t *fd, glfs_io_cbk fn, void *data);
+
+int glfs_access (glfs_t *fs, const char *path, int mode);
+
+int glfs_readlink (glfs_t *fs, const char *path, char *buf, size_t bufsiz);
+
+int glfs_mknod (glfs_t *fs, const char *path, mode_t mode, dev_t dev);
 
 __END_DECLS
 
