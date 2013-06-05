@@ -720,22 +720,30 @@ if test "x$LIBAIO" != "x"; then
    BUILD_LIBAIO=yes
 fi
 
-# glupy section
-BUILD_GLUPY=no
-have_python2=no
-have_Python_h=no
+# python section
+HAVE_PYTHON2=no
+HAVE_PYTHON_H=no
 
 AM_PATH_PYTHON()
 if echo $PYTHON_VERSION | grep ^2; then
-  have_python2=yes
+   HAVE_PYTHON2=yes
+   BUILD_PYTHON_INC=`$PYTHON -c "from distutils import sysconfig; print sysconfig.get_python_inc()"`
+   BUILD_PYTHON_LIB=python$PYTHON_VERSION
+   AC_SUBST(BUILD_PYTHON_INC)
+   AC_SUBST(BUILD_PYTHON_LIB)
 fi
-AC_CHECK_HEADERS([python$PYTHON_VERSION/Python.h],[have_Python_h=yes],[])
+AC_CHECK_HEADERS([python$PYTHON_VERSION/Python.h],[HAVE_PYTHON_H=yes],[])
+
+#end python section
+
+# glupy section
+BUILD_GLUPY=no
 AC_ARG_ENABLE([glupy],
               AS_HELP_STRING([--enable-glupy],
                              [build glupy]))
 case x$enable_glupy in
    xyes)
-      if test "x$have_python2" = "xyes" -a "x$have_Python_h" = "xyes"; then
+      if test "x$HAVE_PYTHON2" = "xyes" -a "x$HAVE_PYTHON_H" = "xyes"; then
          BUILD_GLUPY=yes
       else
          AC_MSG_ERROR([glupy requires python-devel/python-dev package and python2.x])
@@ -744,7 +752,7 @@ case x$enable_glupy in
    xno)
       ;;
    *)
-      if test "x$have_python2" = "xyes" -a "x$have_Python_h" = "xyes"; then
+      if test "x$HAVE_PYTHON2" = "xyes" -a "x$HAVE_PYTHON_H" = "xyes"; then
          BUILD_GLUPY=yes
       else
          AC_MSG_WARN([
@@ -756,19 +764,62 @@ case x$enable_glupy in
 esac
 
 if test "x$BUILD_GLUPY" = "xyes"; then
-   BUILD_PYTHON_INC=`$PYTHON -c "from distutils import sysconfig; print sysconfig.get_python_inc()"`
-   BUILD_PYTHON_LIB=python$PYTHON_VERSION
    GLUPY_SUBDIR=glupy
    GLUPY_SUBDIR_MAKEFILE=xlators/features/glupy/Makefile
    GLUPY_SUBDIR_SRC_MAKEFILE=xlators/features/glupy/src/Makefile
    echo "building glupy with -isystem $BUILD_PYTHON_INC -l $BUILD_PYTHON_LIB"
-   AC_SUBST(BUILD_PYTHON_INC)
-   AC_SUBST(BUILD_PYTHON_LIB)
    AC_SUBST(GLUPY_SUBDIR)
    AC_SUBST(GLUPY_SUBDIR_MAKEFILE)
    AC_SUBST(GLUPY_SUBDIR_SRC_MAKEFILE)
 fi
 # end glupy section
+
+## swig section
+AC_CHECK_PROG(HAVE_SWIG, swig, "yes", "no")
+## end swig section
+
+## Java support
+AC_ARG_WITH(java, AS_HELP_STRING([--without-java], [Disable Java]))
+AC_ARG_WITH(javac,
+	AS_HELP_STRING([--with-javac=PATH],[Set location of javac executable])
+	[JAVACBIN="$withval"],
+	[JAVACBIN=])
+
+BUILD_JAVA=no
+# First, check for "--without-java" or "--with-java=no".
+if test x"${JAVABIN}" = xno -o x"${JAVACBIN}" = xno; then
+   AC_MSG_NOTICE([Disabling Java])
+   JAVA=
+else
+    if test -z "$JAVACBIN"; then
+       AC_PATH_PROGS(JAVAC, javac)
+    else
+	if ! test -x "$JAVACBIN"; then
+	   AC_MSG_WARN([Executable not found: $JAVACBIN])
+	   exit 1;
+	fi
+	JAVAC="$JAVACBIN"
+    fi
+
+    REAL_JAVAC=$(readlink -f "$JAVAC")
+
+    if test -x "$REAL_JAVAC"; then
+       AC_ARG_WITH(javaincl,AS_HELP_STRING([--with-javaincl=PATH],
+					[Set location of Java include directory]),
+					[JAVAINCDIR="$withval"], [JAVAINCDIR=])
+	if test -z "$JAVAINCDIR"; then
+	   JAVAINCDIR=$(dirname $(find $(dirname $REAL_JAVAC)/../include -name jni.h))
+	fi
+	JNIMDDIR=$(dirname $(find $JAVAINCDIR -name jni_md.h))
+	JAVA_CPPFLAGS="-I$JAVAINCDIR -I$JNIMDDIR";
+	orig_CPPFLAGS=$CPPFLAGS
+	CPPFLAGS="$JAVA_CPPFLAGS $CPPFLAGS"
+	AC_CHECK_HEADERS([jni.h],[BUILD_JAVA=yes])
+	CPPFLAGS="$orig_CPPFLAGS"
+    fi
+fi
+
+
 
 AC_SUBST(GF_HOST_OS)
 AC_SUBST([GF_GLUSTERFS_LIBS])
@@ -780,6 +831,8 @@ AC_SUBST(GF_FUSE_LDADD)
 AC_SUBST(GF_FUSE_CFLAGS)
 AC_SUBST(RLLIBS)
 AC_SUBST(LIBAIO)
+AC_SUBST(HAVE_SWIG)
+AC_SUBST(JAVA_CPPFLAGS)
 AC_SUBST(AM_MAKEFLAGS)
 AC_SUBST(AM_LIBTOOLFLAGS)
 
@@ -814,4 +867,5 @@ echo "Block Device backend : $BUILD_BD_XLATOR"
 echo "glupy                : $BUILD_GLUPY"
 echo "Use syslog           : $USE_SYSLOG"
 echo "XML output           : $BUILD_XML_OUTPUT"
+echo "Java bindings        : $BUILD_JAVA"
 echo
