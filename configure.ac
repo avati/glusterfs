@@ -116,6 +116,8 @@ AC_CONFIG_FILES([Makefile
                 xlators/features/index/src/Makefile
 		xlators/features/protect/Makefile
 		xlators/features/protect/src/Makefile
+		xlators/features/file-snapshot/Makefile
+		xlators/features/file-snapshot/src/Makefile
                 xlators/playground/Makefile
 		xlators/playground/template/Makefile
 		xlators/playground/template/src/Makefile
