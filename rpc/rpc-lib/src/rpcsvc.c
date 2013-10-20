@@ -129,6 +129,35 @@ rpcsvc_get_program_vector_sizer (rpcsvc_t *svc, uint32_t prognum,
                 return NULL;
 }
 
+int
+rpcsvc_request_outstanding (rpcsvc_t *svc, rpc_transport_t *trans, int delta)
+{
+	int ret = 0;
+	int old_count = 0;
+	int new_count = 0;
+	int limit = 0;
+
+	pthread_mutex_lock (&trans->lock);
+	{
+		old_count = trans->outstanding_rpc_count;
+		limit = svc->outstanding_rpc_limit;
+
+		trans->outstanding_rpc_count += delta;
+
+		new_count = trans->outstanding_rpc_count;
+
+		if (old_count <= limit && new_count > limit)
+			ret = rpc_transport_throttle (trans, _gf_true);
+
+		if (old_count > limit && new_count <= limit)
+			ret = rpc_transport_throttle (trans, _gf_false);
+	}
+	pthread_mutex_unlock (&trans->lock);
+
+	return ret;
+}
+
+
 /* This needs to change to returning errors, since
  * we need to return RPC specific error messages when some
  * of the pointers below are NULL.
@@ -279,6 +308,8 @@ rpcsvc_request_destroy (rpcsvc_request_t *req)
         if (req->hdr_iobuf)
                 iobuf_unref (req->hdr_iobuf);
 
+	rpcsvc_request_outstanding (req->svc, req->trans, -1);
+
         rpc_transport_unref (req->trans);
 
 	GF_FREE (req->auxgidlarge);
@@ -360,10 +391,13 @@ rpcsvc_request_create (rpcsvc_t *svc, rpc_transport_t *trans,
          * This avoids a need to keep a temp buffer into which the auth data
          * would've been copied otherwise.
          */
+
         rpcsvc_alloc_request (svc, req);
         if (!req) {
                 goto err;
         }
+
+	ret = rpcsvc_request_outstanding (svc, trans, +1);
 
         msgbuf = msg->vector[0].iov_base;
         msglen = msg->vector[0].iov_len;
@@ -1844,6 +1878,24 @@ rpcsvc_init_options (rpcsvc_t *svc, dict_t *options)
         if (!svc->register_portmap)
                 gf_log (GF_RPCSVC, GF_LOG_DEBUG, "Portmap registration "
                         "disabled");
+
+	svc->outstanding_rpc_limit = RPCSVC_DEFAULT_OUTSTANDING_RPC_LIMIT;
+
+	if (dict_get (options, "rpc.outstanding-rpc-limit")) {
+		ret = dict_get_str (options, "rpc.oustanding-rpc-limit",
+				    &optstr);
+		if (ret < 0) {
+			gf_log (GF_RPCSVC, GF_LOG_ERROR, "Value went missing");
+			goto out;
+		}
+
+		ret = gf_string2int32 (optstr, &svc->outstanding_rpc_limit);
+		if (ret < 0) {
+			gf_log (GF_RPCSVC, GF_LOG_ERROR, "Invalid RPC limit %s",
+				optstr);
+			goto out;
+		}
+	}
 
         ret = 0;
 out:
