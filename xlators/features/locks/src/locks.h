@@ -80,6 +80,8 @@ struct __pl_inode_lock {
         pid_t              client_pid;    /* pid of client process */
 
         char              *connection_id; /* stores the client connection id */
+
+	struct list_head   client_list; /* list of all locks from a client */
 };
 typedef struct __pl_inode_lock pl_inode_lock_t;
 
@@ -120,6 +122,8 @@ struct __entry_lock {
 	pid_t             client_pid;    /* pid of client process */
 
         char             *connection_id; /* stores the client connection id */
+
+	struct list_head   client_list; /* list of all locks from a client */
 };
 typedef struct __entry_lock pl_entry_lock_t;
 
@@ -142,12 +146,6 @@ struct __pl_inode {
                                             held to prevent pruning */
 };
 typedef struct __pl_inode pl_inode_t;
-
-
-struct __pl_fd {
-        gf_boolean_t nonblocking;       /* whether O_NONBLOCK has been set */
-};
-typedef struct __pl_fd pl_fd_t;
 
 
 typedef struct {
@@ -178,11 +176,17 @@ typedef struct {
 } pl_fdctx_t;
 
 
+struct _locker {
+        struct list_head  lockers;
+        char             *volume;
+        inode_t          *inode;
+        gf_lkowner_t      owner;
+};
+
 typedef struct _locks_ctx {
-        gf_lock_t            ltable_lock; /* only for replace, 
-                                             ltable has its own internal 
-                                             lock for operations */
-        struct _lock_table  *ltable;
+        pthread_mutex_t      mutex;
+        struct list_head     inodelk_lockers;
+        struct list_head     entrylk_lockers;
 } pl_ctx_t;
 
 

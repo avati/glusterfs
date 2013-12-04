@@ -552,6 +552,7 @@ new_inode_lock (struct gf_flock *flock, client_t *client, pid_t client_pid,
 
         INIT_LIST_HEAD (&lock->list);
         INIT_LIST_HEAD (&lock->blocked_locks);
+	INIT_LIST_HEAD (&lock->client_list);
         __pl_inodelk_ref (lock);
 
         return lock;
@@ -627,6 +628,13 @@ pl_common_inodelk (call_frame_t *frame, xlator_t *this,
 
         pl_trace_in (this, frame, fd, loc, cmd, flock, volume);
 
+        ctx = pl_ctx_get (frame->root->client, this);
+        if (!ctx) {
+		op_errno = ENOMEM;
+                gf_log (this->name, GF_LOG_INFO, "pl_ctx_get() failed");
+                goto unwind;
+        }
+
         pinode = pl_inode_get (this, inode);
         if (!pinode) {
                 op_errno = ENOMEM;
@@ -636,27 +644,6 @@ pl_common_inodelk (call_frame_t *frame, xlator_t *this,
         dom = get_domain (pinode, volume);
         if (!dom) {
                 op_errno = ENOMEM;
-                goto unwind;
-        }
-
-        if (frame->root->lk_owner.len == 0) {
-                /*
-                  special case: this means release all locks
-                  from this client
-                */
-                gf_log (this->name, GF_LOG_TRACE,
-                        "Releasing all locks from client %p", frame->root->client);
-
-                release_inode_locks_of_client (this, dom, inode, frame->root->client);
-                _pl_convert_volume (volume, &res1);
-                if (res1) {
-                        dom = get_domain (pinode, res1);
-                        if (dom)
-                                release_inode_locks_of_client (this, dom,
-                                                        inode, frame->root->client);
-                }
-
-                op_ret = 0;
                 goto unwind;
         }
 
@@ -703,23 +690,6 @@ pl_common_inodelk (call_frame_t *frame, xlator_t *this,
         }
 
         op_ret = 0;
-
-        ctx = pl_ctx_get (frame->root->client, this);
-
-        if (ctx == NULL) {
-                gf_log (this->name, GF_LOG_INFO, "pl_ctx_get() failed");
-                goto unwind;
-        }
-
-        if (flock->l_type == F_UNLCK)
-                pl_del_locker (ctx->ltable, volume, loc, fd,
-                               &frame->root->lk_owner,
-                               GF_FOP_INODELK);
-        else
-                pl_add_locker (ctx->ltable, volume, loc, fd,
-                               frame->root->pid,
-                               &frame->root->lk_owner,
-                               GF_FOP_INODELK);
 
 unwind:
         if ((inode != NULL) && (flock !=NULL)) {

@@ -46,6 +46,7 @@ new_entrylk_lock (pl_inode_t *pinode, const char *basename, entrylk_type type,
 
         INIT_LIST_HEAD (&newlock->domain_list);
         INIT_LIST_HEAD (&newlock->blocked_locks);
+	INIT_LIST_HEAD (&newlock->client_list);
 
 out:
         return newlock;
@@ -733,6 +734,7 @@ pl_common_entrylk (call_frame_t *frame, xlator_t *this,
         op_ret = 0;
 out:
         pl_update_refkeeper (this, inode);
+
         if (unwind) {
                 entrylk_trace_out (this, frame, volume, fd, loc, basename,
                                    cmd, type, op_ret, op_errno);
