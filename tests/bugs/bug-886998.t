@@ -36,7 +36,6 @@ TEST setfattr -n trusted.afr.$V0-client-0 -v 0x000000000000000000000001 $B0/${V0
 TEST setfattr -n trusted.afr.$V0-client-1 -v 0x000000000000000000000000 $B0/${V0}1/
 
 EXPECT "" echo $(ls -a $M0 | grep ".landfill")
-TEST ! stat $B0/${V0}0/.landfill
 TEST stat $B0/${V0}1/.landfill
 
 #TEST that the dir is not deleted even when xattrs suggest to delete
@@ -47,6 +46,5 @@ TEST setfattr -n trusted.afr.$V0-client-0 -v 0x000000000000000000000000 $B0/${V0
 TEST setfattr -n trusted.afr.$V0-client-1 -v 0x000000000000000000000000 $B0/${V0}1/
 
 EXPECT "" echo $(ls -a $M0 | grep ".landfill")
-TEST ! stat $B0/${V0}0/.landfill
 TEST stat $B0/${V0}1/.landfill
 cleanup;
